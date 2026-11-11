@@ -1,0 +1,30 @@
+name: Gerar app Android (APK)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - run: npm test -- --ci
+      - run: node scripts/versao.js ${{ github.run_number }}
+      - run: npx expo prebuild --platform android --no-install
+      - name: Compilar APK de release
+        run: cd android && ./gradlew assembleRelease --no-daemon
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Estoque-android-${{ github.run_number }}
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error

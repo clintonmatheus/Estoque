@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "Estoque",
+    "slug": "Estoque",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "br.com.estoque.galpao"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "br.com.estoque.galpao"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "Estoque do galpão"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O Estoque acessa suas fotos para anexar o pedido de material ao lançamento.",
+          "cameraPermission": "O Estoque usa a câmera para fotografar o pedido de material."
+        }
+      ]
+    ]
+  }
+}

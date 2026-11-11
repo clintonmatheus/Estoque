@@ -1,0 +1,41 @@
+name: Publicar versão para computador (web)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.publicar.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test -- --ci
+      - name: Endereço da página (/nome-do-repositório)
+        run: |
+          node -e "const f='app.json';const c=require('./'+f);c.expo.experiments={baseUrl:'/${{ github.event.repository.name }}'};require('fs').writeFileSync(f,JSON.stringify(c,null,2))"
+      - run: npx expo export --platform web --output-dir dist
+      - run: cp dist/index.html dist/404.html
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+      - id: publicar
+        uses: actions/deploy-pages@v4

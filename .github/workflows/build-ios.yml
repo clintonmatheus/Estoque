@@ -1,0 +1,36 @@
+name: Gerar app iPhone (.ipa sem assinatura)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ipa:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/versao.js ${{ github.run_number }}
+      - run: npx expo prebuild --platform ios --no-install
+      - run: cd ios && pod install
+      - name: Compilar sem assinatura (o Sideloadly assina depois)
+        run: |
+          cd ios
+          xcodebuild -workspace Estoque.xcworkspace -scheme Estoque -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+      - name: Empacotar .ipa
+        run: |
+          mkdir -p Payload
+          cp -R ios/build/Build/Products/Release-iphoneos/Estoque.app Payload/
+          zip -qr Estoque.ipa Payload
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Estoque-iphone-${{ github.run_number }}
+          path: Estoque.ipa
+          if-no-files-found: error
