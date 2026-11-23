@@ -11,7 +11,9 @@ describe('Raiz', () => {
     const carregar = jest.fn(async () => [{ itemId: 't', nome: 'TINTA', unidade: 'lata', estoqueMinimo: 2, saldo: 1 }]);
     await render(<Raiz {...base} usuario={ARTHUR} carregarSaldos={carregar} />);
     expect(await screen.findByText('TINTA')).toBeTruthy();
-    expect(screen.getByText('1 lata · mínimo 2')).toBeTruthy();
+    expect(screen.getByTestId('saldo-t')).toHaveTextContent('1');
+    expect(screen.getByText('Abaixo do mínimo (2)')).toBeTruthy();
+    expect(screen.getByText('Pintura')).toBeTruthy();
     expect(screen.queryByText(/R\$/)).toBeNull();
     expect(screen.queryByTestId('aba-lancar')).toBeNull();
   });
@@ -32,8 +34,14 @@ describe('Raiz', () => {
     await fireEvent.press(screen.getByTestId('confirmar-inventario'));
     expect(await screen.findByText('Inventário registrado: 1 ajuste(s).')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('aba-estoque'));
-    await waitFor(() => expect(screen.getByTestId('valor-total')).toHaveTextContent('R$ 88,00'));
-    expect(screen.getByTestId('saldo-i-broxa')).toHaveTextContent('10 un');
+    await waitFor(() => expect(screen.getByTestId('valor-total')).toHaveTextContent('Valor em estoque: R$ 88,00'));
+    expect(screen.getByTestId('saldo-i-broxa')).toHaveTextContent('10');
+    // filtros prontos: zerados (os outros 44) e pintura
+    await fireEvent.press(screen.getByTestId('filtro-zerados'));
+    expect(screen.queryByTestId('item-i-broxa')).toBeNull();
+    await fireEvent.press(screen.getByTestId('filtro-com-saldo'));
+    expect(screen.getByTestId('item-i-broxa')).toBeTruthy();
+    expect(screen.getByTestId('filtro-cat:Elétrica')).toHaveTextContent('Elétrica (4)');
   });
 
   it('histórico: cancela uma linha com motivo e mostra quem cancelou', async () => {

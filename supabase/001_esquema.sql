@@ -77,10 +77,12 @@ begin
 end $$;
 
 -- Saldos sem valores (R$), para todos os usuários logados — é o que o consultor enxerga.
-create or replace function public.saldos() returns table (item_id text, nome text, unidade text, embalagem jsonb, estoque_minimo numeric, saldo numeric)
+drop function if exists public.saldos();
+create function public.saldos() returns table (item_id text, nome text, unidade text, embalagem jsonb, estoque_minimo numeric, categoria text, saldo numeric)
 language sql stable security definer set search_path = public as $$
   select i.id, i.dados ->> 'nome', i.dados ->> 'unidade', i.dados -> 'embalagem',
          coalesce((i.dados ->> 'estoqueMinimo')::numeric, 0),
+         i.dados ->> 'categoria',
          coalesce(sum(case m.dados ->> 'tipo'
            when 'entrada' then (m.dados ->> 'quantidade')::numeric
            when 'devolucao' then (m.dados ->> 'quantidade')::numeric

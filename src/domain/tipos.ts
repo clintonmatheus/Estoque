@@ -23,6 +23,8 @@ export interface Item {
   /** Embalagem opcional para entradas/saídas fechadas (ex.: caixa com 11 peças). */
   embalagem?: Embalagem;
   estoqueMinimo: number;
+  /** Pintura, Elétrica… (vazio: sugerida pelo nome). */
+  categoria?: string;
   /** Custo usado quando ainda não há compra registrada (ex.: contagem inicial). */
   custoReferencia?: number;
   ativo: boolean;

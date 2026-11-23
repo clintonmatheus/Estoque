@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import type { Estoque } from '../dados/estoque';
+import { CATEGORIAS, categoriaDoItem } from '../domain/categorias';
 import { formatarMoeda, formatarNumero, lerNumero } from '../domain/formato';
 import type { Funcionario, Item, Local } from '../domain/tipos';
 import { Botao, Campo, Cartao, Chips, filtrar, Mensagem } from './componentes';
@@ -36,7 +37,7 @@ export function CadastrosTela({ estoque, versao = 0, onAlterou }: Props) {
   type Linha = { id: string; titulo: string; subtitulo: string; ativo: boolean };
   const linhas: Linha[] = aba === 'itens'
     ? itens.map((i) => ({ id: i.id, titulo: i.nome, ativo: i.ativo,
-      subtitulo: `${i.unidade}${i.embalagem ? ` · ${i.embalagem.nome} com ${i.embalagem.fator}` : ''} · mínimo ${formatarNumero(i.estoqueMinimo)}` }))
+      subtitulo: `${categoriaDoItem(i)} · ${i.unidade}${i.embalagem ? ` · ${i.embalagem.nome} com ${i.embalagem.fator}` : ''} · mínimo ${formatarNumero(i.estoqueMinimo)}` }))
     : aba === 'locais'
       ? locais.map((l) => ({ id: l.id, titulo: l.nome, subtitulo: l.centroCusto, ativo: l.ativo }))
       : funcs.map((f) => ({ id: f.id, titulo: f.nome, subtitulo: '', ativo: f.ativo }));
@@ -113,6 +114,7 @@ function FormItem({ estoque, item, onFim, onVoltar }: { estoque: Estoque; item?:
   const [minimo, setMinimo] = useState(item ? String(item.estoqueMinimo).replace('.', ',') : '0');
   const [custoRef, setCustoRef] = useState(item?.custoReferencia !== undefined ? String(item.custoReferencia).replace('.', ',') : '');
   const [ativo, setAtivo] = useState(item?.ativo ?? true);
+  const [categoria, setCategoria] = useState<string>(item ? categoriaDoItem(item) : 'Outros');
   const [erro, setErro] = useState<string>();
 
   async function salvar() {
@@ -123,7 +125,7 @@ function FormItem({ estoque, item, onFim, onVoltar }: { estoque: Estoque; item?:
       if (min === undefined) throw new Error('Estoque mínimo inválido');
       const ref = lerNumero(custoRef);
       await estoque.salvarItem({
-        id: item?.id, nome, unidade, estoqueMinimo: min, ativo,
+        id: item?.id, nome, unidade, estoqueMinimo: min, ativo, categoria,
         ...(temEmb ? { embalagem: { nome: embNome.trim(), fator: fator ?? 0 } } : {}),
         ...(ref !== undefined ? { custoReferencia: ref } : {}),
       });
@@ -136,7 +138,9 @@ function FormItem({ estoque, item, onFim, onVoltar }: { estoque: Estoque; item?:
         <Cartao>
           <Text style={estilos.titulo}>{item ? 'Editar item' : 'Novo item'}</Text>
           <Text style={estilos.subtitulo}>Cada tamanho de embalagem é um item (ex.: massa 18 L e massa 25 kg são itens diferentes).</Text>
-          <Campo testID="nome" rotulo="Nome" value={nome} onChangeText={setNome} autoCapitalize="characters" />
+          <Campo testID="nome" rotulo="Nome" value={nome} onChangeText={(v) => { setNome(v); if (!item) setCategoria(categoriaDoItem({ nome: v })); }} autoCapitalize="characters" />
+          <Text style={estilos.rotulo}>Categoria (usada nos filtros do estoque)</Text>
+          <Chips prefixo="categoria" valor={categoria} onMudar={setCategoria} opcoes={CATEGORIAS.map((c) => ({ id: c, titulo: c }))} />
           <Text style={estilos.rotulo}>Unidade de controle do saldo</Text>
           <Chips prefixo="unidade" valor={unidade} onMudar={setUnidade} opcoes={[...new Set([...UNIDADES, unidade])].map((u) => ({ id: u, titulo: u }))} />
           <View style={estilos.linha}>

@@ -23,6 +23,8 @@ saídas para as frentes de serviço, devoluções, transferências, inventário 
 4. Entre no app como administrador → **Mais → Cadastros → Importar lista da planilha** (45 itens) e cadastre as frentes de serviço e os funcionários.
 5. **Mais → Inventário:** faça a contagem inicial. Ela vira o saldo de partida, valorizado pelo custo da planilha.
 
+**Atualização (categorias):** quem já rodou o `001`, rode também `supabase/003_categorias.sql` (uma vez).
+
 As permissões foram testadas num Postgres local: `bash supabase/teste/rodar.sh`.
 
 ## Instalar

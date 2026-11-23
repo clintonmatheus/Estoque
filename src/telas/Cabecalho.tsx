@@ -1,26 +1,31 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ReactNode } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
-import { estilos } from './estilos';
+import { Pressable, Text, View } from 'react-native';
+import { cores, estilos } from './estilos';
 
 interface Props {
   titulo: string;
   subtitulo?: string;
   rotuloVoltar?: string;
   onVoltar?: () => void;
-  logo?: boolean;
+  /** Ação à direita do título (ex.: Sair). */
+  direita?: ReactNode;
   children?: ReactNode;
 }
 
-export function Cabecalho({ titulo, subtitulo, rotuloVoltar, onVoltar, logo, children }: Props) {
+export function Cabecalho({ titulo, subtitulo, rotuloVoltar, onVoltar, direita, children }: Props) {
   return (
     <View style={estilos.cabecalho}>
-      {logo && <Image testID="logo" source={require('../../assets/marca/logo-claro-horizontal.png')} style={estilos.logo} />}
       {onVoltar && (
-        <Pressable testID="voltar" onPress={onVoltar} hitSlop={12}>
-          <Text style={estilos.voltar}>{`‹ ${rotuloVoltar ?? 'Voltar'}`}</Text>
+        <Pressable testID="voltar" onPress={onVoltar} hitSlop={12} style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' }}>
+          <Ionicons name="chevron-back" size={18} color={cores.cabecalhoSuave} />
+          <Text style={estilos.voltar}>{rotuloVoltar ?? 'Voltar'}</Text>
         </Pressable>
       )}
-      <Text style={estilos.cabecalhoTitulo}>{titulo}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Text style={[estilos.cabecalhoTitulo, { flex: 1 }]}>{titulo}</Text>
+        {direita}
+      </View>
       {subtitulo !== undefined && <Text style={estilos.cabecalhoSub}>{subtitulo}</Text>}
       {children}
     </View>

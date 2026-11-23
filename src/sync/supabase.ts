@@ -94,7 +94,7 @@ export class RemotoSupabase implements Remoto {
     return (data ?? []).map((l: Record<string, unknown>) => ({
       itemId: l.item_id as string, nome: l.nome as string, unidade: l.unidade as string,
       embalagem: (l.embalagem as SaldoSimples['embalagem']) ?? undefined,
-      estoqueMinimo: Number(l.estoque_minimo), saldo: Number(l.saldo),
+      estoqueMinimo: Number(l.estoque_minimo), saldo: Number(l.saldo), categoria: (l.categoria as string | null) ?? undefined,
     }));
   }
 }

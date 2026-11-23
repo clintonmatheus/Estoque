@@ -5,11 +5,11 @@ import { cores, estilos } from './estilos';
 export function Botao({ titulo, onPress, testID, secundario, perigo, desativado }: {
   titulo: string; onPress: () => void; testID?: string; secundario?: boolean; perigo?: boolean; desativado?: boolean;
 }) {
-  const fundo = secundario ? cores.primariaClara : perigo ? cores.erro : cores.primaria;
+  const fundo = secundario ? cores.primariaClara : perigo ? cores.erroClaro : cores.primaria;
   return (
     <Pressable testID={testID} disabled={desativado} onPress={onPress}
       style={[estilos.botao, { backgroundColor: fundo, flex: secundario || perigo ? 1 : undefined }, desativado && { opacity: 0.5 }]}>
-      <Text style={[estilos.botaoTexto, secundario && { color: cores.primaria }]}>{titulo}</Text>
+      <Text style={[estilos.botaoTexto, secundario && { color: cores.primaria }, perigo && { color: cores.erro }]}>{titulo}</Text>
     </Pressable>
   );
 }

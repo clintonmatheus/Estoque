@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { SaldoSimples } from '../auth/autenticacao';
@@ -18,12 +19,13 @@ import { LancamentoTela } from './LancamentoTela';
 import { RelatoriosTela, type SaidaRelatorio } from './RelatoriosTela';
 
 type Aba = 'estoque' | 'lancar' | 'historico' | 'relatorios' | 'mais';
-const ABAS: { id: Aba; titulo: string; icone: string }[] = [
-  { id: 'estoque', titulo: 'Estoque', icone: '▦' },
-  { id: 'lancar', titulo: 'Lançar', icone: '＋' },
-  { id: 'historico', titulo: 'Histórico', icone: '☰' },
-  { id: 'relatorios', titulo: 'Relatórios', icone: '⎙' },
-  { id: 'mais', titulo: 'Mais', icone: '⋯' },
+type NomeIcone = keyof typeof Ionicons.glyphMap;
+const ABAS: { id: Aba; titulo: string; icone: NomeIcone }[] = [
+  { id: 'estoque', titulo: 'Estoque', icone: 'cube-outline' },
+  { id: 'lancar', titulo: 'Lançar', icone: 'add-circle-outline' },
+  { id: 'historico', titulo: 'Histórico', icone: 'list-outline' },
+  { id: 'relatorios', titulo: 'Relatórios', icone: 'document-text-outline' },
+  { id: 'mais', titulo: 'Mais', icone: 'ellipsis-horizontal' },
 ];
 
 interface Props {
@@ -45,10 +47,9 @@ export function Raiz(p: Props) {
   if (!p.estoque || !podeLancar(p.usuario)) {
     return (
       <View style={estilos.tela}>
-        <Cabecalho logo titulo="Saldos do estoque" subtitulo={`${p.usuario.nome} · consulta`}>
-          <Pressable testID="sair" onPress={p.onSair} hitSlop={8}><Text style={estilos.voltar}>Sair</Text></Pressable>
-        </Cabecalho>
-        <ConsultaTela carregar={p.carregarSaldos} versao={p.versao} />
+        <Cabecalho titulo="Estoque" subtitulo={`${p.usuario.nome} · consulta de saldos`}
+          direita={<Pressable testID="sair" onPress={p.onSair} hitSlop={8}><Text style={estilos.voltar}>Sair</Text></Pressable>} />
+        <ConsultaTela carregar={p.carregarSaldos} hoje={p.hoje} versao={p.versao} />
       </View>
     );
   }
@@ -69,7 +70,7 @@ function RaizLancador({ usuario, estoque, servicoFotos, saida, hoje, agora, vers
       <Cabecalho titulo={titulo} subtitulo={`${usuario.nome} · ${textoSync(estadoSync)}`}
         rotuloVoltar="Mais" onVoltar={aba === 'mais' && mais !== 'menu' ? () => setMais('menu') : undefined} />
       <View style={{ flex: 1 }}>
-        {aba === 'estoque' && <EstoqueTela estoque={estoque} versao={v} />}
+        {aba === 'estoque' && <EstoqueTela estoque={estoque} hoje={hoje} versao={v} />}
         {aba === 'lancar' && (
           <View style={{ flex: 1 }}>
             <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
@@ -88,20 +89,35 @@ function RaizLancador({ usuario, estoque, servicoFotos, saida, hoje, agora, vers
         {aba === 'mais' && mais === 'menu' && (
           <ScrollView contentContainerStyle={estilos.conteudo}>
             <BarraUsuario nome={`${usuario.nome} (${usuario.papel === 'admin' ? 'administrador' : 'almoxarife'})`} estado={estadoSync} onSincronizar={onSincronizar} onSair={onSair} />
-            <Botao testID="abrir-cadastros" titulo="Cadastros: itens, frentes e funcionários" onPress={() => setMais('cadastros')} />
-            <Botao testID="abrir-inventario" titulo="Inventário (contagem física)" onPress={() => setMais('inventario')} />
+            <ItemMenu testID="abrir-cadastros" icone="pricetags-outline" titulo="Cadastros" sub="Itens, frentes de serviço e funcionários" onPress={() => setMais('cadastros')} />
+            <ItemMenu testID="abrir-inventario" icone="clipboard-outline" titulo="Inventário" sub="Contagem física do galpão" onPress={() => setMais('inventario')} />
           </ScrollView>
         )}
       </View>
-      <View style={{ flexDirection: 'row', backgroundColor: cores.card, borderTopWidth: 1, borderTopColor: cores.borda, paddingBottom: 18, paddingTop: 6 }}>
+      <View style={{ flexDirection: 'row', backgroundColor: cores.card, borderTopWidth: 1, borderTopColor: cores.borda, paddingBottom: 6, paddingTop: 6 }}>
         {ABAS.map((a) => (
           <Pressable key={a.id} testID={`aba-${a.id}`} onPress={() => { setAba(a.id); if (a.id === 'mais') setMais('menu'); }}
             style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}>
-            <Text style={{ fontSize: 18, color: aba === a.id ? cores.primaria : cores.suave }}>{a.icone}</Text>
+            <Ionicons name={aba === a.id ? (a.icone.replace('-outline', '') as NomeIcone) : a.icone} size={23} color={aba === a.id ? cores.primaria : cores.suave} />
             <Text style={{ fontSize: 11, fontWeight: '600', color: aba === a.id ? cores.primaria : cores.suave }}>{a.titulo}</Text>
           </Pressable>
         ))}
       </View>
     </View>
+  );
+}
+
+function ItemMenu({ testID, icone, titulo, sub, onPress }: { testID: string; icone: NomeIcone; titulo: string; sub: string; onPress: () => void }) {
+  return (
+    <Pressable testID={testID} onPress={onPress} style={[estilos.card, { flexDirection: 'row', alignItems: 'center', gap: 14 }]}>
+      <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: cores.primariaClara, alignItems: 'center', justifyContent: 'center' }}>
+        <Ionicons name={icone} size={22} color={cores.primaria} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={estilos.titulo}>{titulo}</Text>
+        <Text style={estilos.subtitulo}>{sub}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={cores.suave} />
+    </Pressable>
   );
 }

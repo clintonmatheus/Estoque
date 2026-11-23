@@ -94,7 +94,10 @@ export default function App() {
       <View style={{ flex: 1, backgroundColor: cores.fundo }}>
         <SafeAreaView edges={['top']} style={{ backgroundColor: cores.cabecalho }} />
         {/* Android (edge-to-edge) e iPhone: o conteúdo encolhe acima do teclado e continua rolando. */}
-        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>{conteudo}</KeyboardAvoidingView>
+        {/* edges bottom: nada fica atrás dos botões de navegação do Android (barra de 3 botões) nem da barra do iPhone. */}
+        <SafeAreaView edges={['bottom']} style={{ flex: 1, backgroundColor: cores.card }}>
+          <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: cores.fundo }}>{conteudo}</KeyboardAvoidingView>
+        </SafeAreaView>
         <StatusBar style="light" />
       </View>
     </SafeAreaProvider>

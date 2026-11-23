@@ -18,4 +18,6 @@ export interface SaldoSimples {
   embalagem?: { nome: string; fator: number };
   estoqueMinimo: number;
   saldo: number;
+  /** Categoria do cadastro (vazia: sugerida pelo nome). */
+  categoria?: string;
 }
