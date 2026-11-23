@@ -12,4 +12,4 @@ trap 'run "$BIN/pg_ctl -D $DIR/db stop -m fast >/dev/null"; rm -rf "$DIR"' EXIT
 sleep 1
 P="psql -h $DIR -p 54329 -U postgres -d postgres -v ON_ERROR_STOP=1 -q"
 cd "$RAIZ"
-run "cd $RAIZ && $P -f supabase/teste/stub_supabase.sql && $P -f supabase/001_esquema.sql && $P -f supabase/001_esquema.sql && $P -f supabase/teste/cenarios.sql"
+run "cd $RAIZ && $P -f supabase/teste/stub_supabase.sql && $P -f supabase/001_esquema.sql && $P -f supabase/001_esquema.sql && $P -f supabase/004_ferramentas_epi.sql && $P -f supabase/004_ferramentas_epi.sql && $P -f supabase/teste/cenarios.sql && $P -f supabase/teste/cenarios_etapa2.sql"

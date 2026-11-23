@@ -1,7 +1,8 @@
 import { calcularPosicao, novosProblemas, type Posicao } from '../domain/estoque';
 import { formatarQuantidade } from '../domain/formato';
 import { ITENS_INICIAIS } from '../domain/itensIniciais';
-import { podeLancar, type Anexo, type Autoria, type Funcionario, type Item, type Local, type Movimento, type TipoMovimento, type Usuario } from '../domain/tipos';
+import { emprestimoAberto } from '../domain/ferramentas';
+import { podeLancar, type Anexo, type Autoria, type Emprestimo, type Ferramenta, type Funcionario, type Item, type Local, type Movimento, type TipoMovimento, type Usuario } from '../domain/tipos';
 import type { Armazenamento, Tabela } from '../storage/contrato';
 
 export interface OpcoesEstoque {
@@ -11,7 +12,7 @@ export interface OpcoesEstoque {
   aoAlterar?: () => void;
 }
 
-export interface LinhaLancamento { itemId: string; quantidade: number; custoUnitario?: number }
+export interface LinhaLancamento { itemId: string; quantidade: number; custoUnitario?: number; ca?: string; tamanho?: string; validade?: string }
 
 export interface Lancamento {
   tipo: Exclude<TipoMovimento, 'ajuste'>;
@@ -26,13 +27,19 @@ export interface Lancamento {
 }
 
 export type CamposEditaveis = Partial<Pick<Movimento,
-  'data' | 'quantidade' | 'custoUnitario' | 'notaFiscal' | 'fornecedor' | 'localId' | 'localDestinoId' | 'funcionarioId' | 'observacao'>>;
+  'data' | 'quantidade' | 'custoUnitario' | 'notaFiscal' | 'fornecedor' | 'localId' | 'localDestinoId' | 'funcionarioId' | 'observacao' | 'ca' | 'tamanho' | 'validade'>>;
 
 export interface Contagem { itemId: string; contado: number }
 
 type NovoItem = Omit<Item, 'id' | 'criado' | 'alterado'> & { id?: string };
 type NovoLocal = Omit<Local, 'id' | 'criado' | 'alterado'> & { id?: string };
 type NovoFuncionario = Omit<Funcionario, 'id' | 'criado' | 'alterado'> & { id?: string };
+type NovaFerramenta = Omit<Ferramenta, 'id' | 'criado' | 'alterado'> & { id?: string };
+
+export interface NovoEmprestimo { ferramentaId: string; funcionarioId: string; localId?: string; saida: string; prevista: string; observacao?: string }
+export interface Devolucao { devolvidoEm: string; observacaoDevolucao?: string }
+
+const ehData = (d?: string) => !!d && /^\d{4}-\d{2}-\d{2}$/.test(d);
 
 const porNome = <T extends { nome: string }>(a: T, b: T) => a.nome.localeCompare(b.nome, 'pt-BR');
 const texto = (s?: string) => (s?.trim() ? s.trim() : undefined);
@@ -61,6 +68,11 @@ export class Estoque {
   }
   async funcionarios(incluirInativos = false) { return (await this.a.funcionarios.listar()).filter((f) => incluirInativos || f.ativo).sort(porNome); }
   async movimentos() { return this.a.movimentos.listar(); }
+  async ferramentas(incluirInativas = false) {
+    return (await this.a.ferramentas.listar()).filter((f) => incluirInativas || f.ativo)
+      .sort((x, y) => porNome(x, y) || (x.codigo ?? '').localeCompare(y.codigo ?? '', 'pt-BR', { numeric: true }));
+  }
+  async emprestimos() { return this.a.emprestimos.listar(); }
   async anexos(grupo: string) { return (await this.a.anexos.listar()).filter((x) => x.grupo === grupo && !x.excluido); }
 
   private async custosReferencia() {
@@ -134,6 +146,92 @@ export class Estoque {
     return n;
   }
 
+  async salvarFerramenta(n: NovaFerramenta): Promise<Ferramenta> {
+    this.exigirPermissao();
+    const nome = texto(n.nome)?.toUpperCase();
+    if (!nome) throw new Error('Informe o nome da ferramenta');
+    const codigo = texto(n.codigo);
+    const repetida = (await this.a.ferramentas.listar()).find((f) => f.id !== n.id && f.nome === nome && (f.codigo ?? '') === (codigo ?? ''));
+    if (repetida) throw new Error('Já existe essa ferramenta');
+    const atual = n.id ? await this.a.ferramentas.obter(n.id) : undefined;
+    const f: Ferramenta = {
+      ...n, id: n.id ?? this.o.novoId(), nome,
+      criado: atual?.criado ?? this.autoria(), ...(atual ? { alterado: this.autoria() } : {}),
+    };
+    if (codigo) f.codigo = codigo; else delete f.codigo;
+    await this.gravar('ferramentas', f);
+    this.alterou();
+    return f;
+  }
+
+  // ---------- Empréstimo de ferramentas ----------
+  private validarEmprestimo(e: Pick<Emprestimo, 'saida' | 'prevista' | 'funcionarioId'>) {
+    if (!e.funcionarioId) throw new Error('Informe quem retirou');
+    if (!ehData(e.saida) || !ehData(e.prevista)) throw new Error('Data inválida');
+    if (e.prevista < e.saida) throw new Error('A devolução prevista não pode ser antes da saída');
+  }
+
+  async emprestar(n: NovoEmprestimo): Promise<Emprestimo> {
+    this.exigirPermissao();
+    this.validarEmprestimo(n);
+    const ferramenta = await this.a.ferramentas.obter(n.ferramentaId);
+    if (!ferramenta) throw new Error('Ferramenta não encontrada');
+    if (!ferramenta.ativo) throw new Error('Ferramenta inativa');
+    const fora = (await this.a.emprestimos.listar()).find((x) => x.ferramentaId === n.ferramentaId && emprestimoAberto(x));
+    if (fora) {
+      const quem = await this.a.funcionarios.obter(fora.funcionarioId);
+      throw new Error(`${ferramenta.nome}${ferramenta.codigo ? ` ${ferramenta.codigo}` : ''} já está com ${quem?.nome ?? 'outro funcionário'}`);
+    }
+    const e: Emprestimo = {
+      id: this.o.novoId(), ferramentaId: n.ferramentaId, funcionarioId: n.funcionarioId, saida: n.saida, prevista: n.prevista, criado: this.autoria(),
+    };
+    if (n.localId) e.localId = n.localId;
+    if (texto(n.observacao)) e.observacao = texto(n.observacao);
+    await this.gravar('emprestimos', e);
+    this.alterou();
+    return e;
+  }
+
+  private async emprestimo(id: string) {
+    const e = await this.a.emprestimos.obter(id);
+    if (!e) throw new Error('Empréstimo não encontrado');
+    if (e.cancelado) throw new Error('Empréstimo cancelado');
+    return e;
+  }
+
+  async devolverFerramenta(id: string, d: Devolucao): Promise<Emprestimo> {
+    this.exigirPermissao();
+    const e = await this.emprestimo(id);
+    if (e.devolvidoEm) throw new Error('Essa ferramenta já foi devolvida');
+    if (!ehData(d.devolvidoEm)) throw new Error('Data inválida');
+    if (d.devolvidoEm < e.saida) throw new Error('A devolução não pode ser antes da saída');
+    const novo: Emprestimo = { ...e, devolvidoEm: d.devolvidoEm, devolvido: this.autoria() };
+    if (texto(d.observacaoDevolucao)) novo.observacaoDevolucao = texto(d.observacaoDevolucao);
+    await this.gravar('emprestimos', novo);
+    this.alterou();
+    return novo;
+  }
+
+  async editarEmprestimo(id: string, campos: Partial<Pick<Emprestimo, 'funcionarioId' | 'localId' | 'saida' | 'prevista' | 'observacao'>>): Promise<Emprestimo> {
+    this.exigirPermissao();
+    const novo: Emprestimo = { ...(await this.emprestimo(id)), ...campos, alterado: this.autoria() };
+    this.validarEmprestimo(novo);
+    if (novo.devolvidoEm && novo.devolvidoEm < novo.saida) throw new Error('A devolução não pode ser antes da saída');
+    if ('observacao' in campos && !texto(campos.observacao)) delete novo.observacao;
+    await this.gravar('emprestimos', novo);
+    this.alterou();
+    return novo;
+  }
+
+  async cancelarEmprestimo(id: string, motivo: string): Promise<Emprestimo> {
+    this.exigirPermissao();
+    if (!texto(motivo)) throw new Error('Informe o motivo do cancelamento');
+    const novo: Emprestimo = { ...(await this.emprestimo(id)), cancelado: { ...this.autoria(), motivo: motivo.trim() } };
+    await this.gravar('emprestimos', novo);
+    this.alterou();
+    return novo;
+  }
+
   // ---------- Movimentos ----------
   private async validarSaldo(antes: Movimento[], depois: Movimento[]) {
     const problemas = novosProblemas(antes, depois, await this.custosReferencia());
@@ -149,7 +247,7 @@ export class Estoque {
     throw new Error(`Saldo insuficiente: ${nome} — disponível ${qtd}`);
   }
 
-  private validarCampos(m: Pick<Movimento, 'tipo' | 'data' | 'quantidade' | 'custoUnitario' | 'localId' | 'localDestinoId' | 'funcionarioId'>) {
+  private validarCampos(m: Pick<Movimento, 'tipo' | 'data' | 'quantidade' | 'custoUnitario' | 'localId' | 'localDestinoId' | 'funcionarioId' | 'validade'>) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(m.data)) throw new Error('Data inválida');
     if (m.tipo === 'ajuste' ? m.quantidade === 0 : !(m.quantidade > 0)) throw new Error('Quantidade inválida');
     if (m.tipo === 'entrada' && !(m.custoUnitario !== undefined && m.custoUnitario >= 0)) throw new Error('Informe o valor unitário');
@@ -161,6 +259,8 @@ export class Estoque {
       if (m.localDestinoId === m.localId) throw new Error('Origem e destino devem ser diferentes');
     }
     if (m.tipo === 'saida' && !m.funcionarioId) throw new Error('Informe quem retirou');
+    if (m.tipo === 'epi' && !m.funcionarioId) throw new Error('Informe o funcionário');
+    if (m.validade !== undefined && !ehData(m.validade)) throw new Error('Data de validade inválida');
   }
 
   async lancar(l: Lancamento): Promise<Movimento[]> {
@@ -181,6 +281,11 @@ export class Estoque {
       if (l.tipo === 'transferencia' && l.localDestinoId) m.localDestinoId = l.localDestinoId;
       if (l.funcionarioId && l.tipo !== 'entrada') m.funcionarioId = l.funcionarioId;
       if (texto(l.observacao)) m.observacao = texto(l.observacao);
+      if (l.tipo === 'epi') {
+        if (texto(ln.ca)) m.ca = texto(ln.ca);
+        if (texto(ln.tamanho)) m.tamanho = texto(ln.tamanho);
+        if (texto(ln.validade)) m.validade = texto(ln.validade);
+      }
       this.validarCampos(m);
       return m;
     });
@@ -209,7 +314,7 @@ export class Estoque {
   async editarMovimento(id: string, campos: CamposEditaveis): Promise<Movimento> {
     this.exigirPermissao();
     const m = { ...(await this.movimento(id)), ...campos, alterado: this.autoria() };
-    for (const k of ['notaFiscal', 'fornecedor', 'observacao'] as const) {
+    for (const k of ['notaFiscal', 'fornecedor', 'observacao', 'ca', 'tamanho', 'validade'] as const) {
       if (k in campos) { const v = texto(campos[k]); if (v) m[k] = v; else delete m[k]; }
     }
     this.validarCampos(m);

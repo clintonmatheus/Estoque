@@ -12,7 +12,7 @@ import { cores, estilos } from './estilos';
 
 type Tipo = Lancamento['tipo'];
 
-interface Linha { chave: number; itemId: string; qtd: string; emEmbalagem: boolean; custo: string }
+interface Linha { chave: number; itemId: string; qtd: string; emEmbalagem: boolean; custo: string; ca: string; tamanho: string; validade: string }
 
 interface Props {
   estoque: Estoque;
@@ -28,6 +28,7 @@ const DICA: Record<Tipo, string> = {
   saida: 'Material saindo do galpão para uma frente de serviço.',
   devolucao: 'Sobra voltando de uma frente de serviço para o galpão. O valor é abatido da frente.',
   transferencia: 'Material passando de uma frente para outra, sem voltar ao galpão.',
+  epi: 'EPI entregue a um funcionário. Baixa o estoque do galpão; não entra no custo das frentes de serviço.',
 };
 
 const opcaoLocal = (l: Local) => ({ id: l.id, titulo: l.nome, subtitulo: l.centroCusto });
@@ -69,7 +70,7 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
     setEscolhendo(false);
     setOk(undefined);
     const ultimo = posicao?.itens[itemId]?.ultimoCusto ?? item(itemId)?.custoReferencia;
-    setLinhas((ls) => [...ls, { chave: ++chaves, itemId, qtd: '', emEmbalagem: false, custo: tipo === 'entrada' && ultimo ? String(ultimo).replace('.', ',') : '' }]);
+    setLinhas((ls) => [...ls, { chave: ++chaves, itemId, qtd: '', emEmbalagem: false, custo: tipo === 'entrada' && ultimo ? String(ultimo).replace('.', ',') : '', ca: '', tamanho: '', validade: '' }]);
   }
   const mudar = (chave: number, campo: Partial<Linha>) => setLinhas((ls) => ls.map((l) => (l.chave === chave ? { ...l, ...campo } : l)));
 
@@ -98,6 +99,9 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
           const q = lerNumero(ln.qtd);
           if (q === undefined || q <= 0) throw new Error(`Informe a quantidade de ${it.nome}`);
           const linha = { itemId: ln.itemId, quantidade: paraUnidadeBase(it, q, ln.emEmbalagem) };
+          if (tipo === 'epi') {
+            return { ...linha, ca: ln.ca, tamanho: ln.tamanho, ...(ln.validade.trim() ? { validade: analisarDataBR(ln.validade) } : {}) };
+          }
           if (tipo !== 'entrada') return linha;
           const c = lerNumero(ln.custo);
           if (c === undefined || c < 0) throw new Error(`Informe o valor unitário de ${it.nome}`);
@@ -107,7 +111,7 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
       setSalvando(true);
       const movs = await estoque.lancar(l);
       for (const uri of fotos) await estoque.anexarFoto(movs[0].grupo, uri);
-      setLinhas([]); setFotos([]); setNf(''); setFornecedor(''); setObs('');
+      setLinhas([]); setFotos([]); setNf(''); setFornecedor(''); setObs(''); if (tipo === 'epi') setFuncionarioId(undefined);
       setOk(`${NOME_TIPO[tipo]} registrada (${movs.length} ${movs.length === 1 ? 'item' : 'itens'}).`);
       setPosicao(await estoque.posicao());
       onSalvo?.();
@@ -134,7 +138,7 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
             <Campo testID="fornecedor" rotulo="Fornecedor" value={fornecedor} onChangeText={setFornecedor} style={{ flex: 2 }} placeholder="Opcional" />
           </View>
         )}
-        {tipo !== 'entrada' && (
+        {tipo !== 'entrada' && tipo !== 'epi' && (
           <Seletor testID="local" rotulo={tipo === 'saida' ? 'Frente de serviço (destino)' : 'Frente de serviço (origem)'}
             valor={localId} opcoes={locais.map(opcaoLocal)} onEscolher={setLocalId} />
         )}
@@ -142,8 +146,8 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
           <Seletor testID="destino" rotulo="Frente de serviço (destino)" valor={destinoId}
             opcoes={locais.filter((l) => l.id !== localId).map(opcaoLocal)} onEscolher={setDestinoId} />
         )}
-        {(tipo === 'saida' || tipo === 'devolucao') && (
-          <Seletor testID="funcionario" rotulo={tipo === 'saida' ? 'Quem retirou' : 'Quem devolveu (opcional)'} valor={funcionarioId}
+        {(tipo === 'saida' || tipo === 'devolucao' || tipo === 'epi') && (
+          <Seletor testID="funcionario" rotulo={tipo === 'saida' ? 'Quem retirou' : tipo === 'epi' ? 'Funcionário que recebeu' : 'Quem devolveu (opcional)'} valor={funcionarioId}
             opcoes={funcionarios.map((f) => ({ id: f.id, titulo: f.nome }))} onEscolher={setFuncionarioId} />
         )}
       </Cartao>
@@ -171,6 +175,16 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
                   value={ln.custo} onChangeText={(v) => mudar(ln.chave, { custo: v })} keyboardType="decimal-pad" style={{ flex: 1 }} />
               )}
             </View>
+            {tipo === 'epi' && (
+              <>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Campo testID={`ca-${it.id}`} rotulo="Nº do CA" value={ln.ca} onChangeText={(v) => mudar(ln.chave, { ca: v })} keyboardType="number-pad" style={{ flex: 1 }} placeholder="Opcional" />
+                  <Campo testID={`tamanho-${it.id}`} rotulo="Tamanho" value={ln.tamanho} onChangeText={(v) => mudar(ln.chave, { tamanho: v })} style={{ flex: 1 }} placeholder="Ex.: 42, G" />
+                </View>
+                <Campo testID={`validade-${it.id}`} rotulo="Trocar em (validade)" value={ln.validade} onChangeText={(v) => mudar(ln.chave, { validade: v })}
+                  keyboardType="numbers-and-punctuation" placeholder="dd/mm/aaaa (opcional)" />
+              </>
+            )}
             {it.embalagem && (
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 {[false, true].map((emb) => (
@@ -209,7 +223,7 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
 
       <Campo testID="obs" rotulo="Observação" value={obs} onChangeText={setObs} placeholder="Opcional" multiline />
       <Mensagem erro={erro} ok={ok} />
-      <Botao testID="salvar" titulo={salvando ? 'Salvando…' : `Registrar ${NOME_TIPO[tipo].toLowerCase()}`} desativado={salvando} onPress={() => void salvar()} />
+      <Botao testID="salvar" titulo={salvando ? 'Salvando…' : tipo === 'epi' ? 'Registrar entrega de EPI' : `Registrar ${NOME_TIPO[tipo].toLowerCase()}`} desativado={salvando} onPress={() => void salvar()} />
     </ScrollView>
   );
 }

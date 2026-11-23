@@ -1,7 +1,8 @@
 import { formatarDataBR, type Periodo } from '../domain/datas';
 import { gastosPorLocal, ordenarMovimentos, type Posicao } from '../domain/estoque';
 import { formatarMoeda, formatarNumero } from '../domain/formato';
-import type { Funcionario, Item, Local, Movimento, TipoMovimento } from '../domain/tipos';
+import { atrasado, diasDeAtraso, emprestimosAbertos } from '../domain/ferramentas';
+import type { Emprestimo, Ferramenta, Funcionario, Item, Local, Movimento, TipoMovimento } from '../domain/tipos';
 
 export type TipoColuna = 'texto' | 'numero' | 'moeda';
 export interface Coluna { titulo: string; tipo: TipoColuna }
@@ -19,7 +20,7 @@ export interface Relatorio {
 }
 
 export const NOME_TIPO: Record<TipoMovimento, string> = {
-  entrada: 'Entrada', saida: 'Saída', devolucao: 'Devolução', transferencia: 'Transferência', ajuste: 'Ajuste de inventário',
+  entrada: 'Entrada', saida: 'Saída', devolucao: 'Devolução', transferencia: 'Transferência', ajuste: 'Ajuste de inventário', epi: 'Entrega de EPI',
 };
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -100,11 +101,12 @@ export function relatorioHistorico(
   const saldoInicial = anteriores.length ? posicao.saldoApos[anteriores[anteriores.length - 1].id] ?? 0 : 0;
   const linhas: Linha[] = [{ celulas: [formatarDataBR(periodo.inicio), 'Saldo anterior', '', '', '', '', saldoInicial], estilo: 'grupo' }];
   for (const m of doItem.filter((x) => x.data >= periodo.inicio && x.data <= periodo.fim)) {
-    const sinal = m.tipo === 'saida' ? -1 : m.tipo === 'transferencia' ? 0 : 1;
+    const sinal = m.tipo === 'saida' || m.tipo === 'epi' ? -1 : m.tipo === 'transferencia' ? 0 : 1;
     const q = m.tipo === 'ajuste' ? m.quantidade : m.quantidade * sinal;
     let detalhe = '';
     if (m.tipo === 'entrada') detalhe = [m.fornecedor, m.notaFiscal && `NF ${m.notaFiscal}`].filter(Boolean).join(' · ');
     else if (m.tipo === 'saida') detalhe = [local.get(m.localId ?? ''), m.funcionarioId && `retirou: ${func.get(m.funcionarioId) ?? ''}`].filter(Boolean).join(' · ');
+    else if (m.tipo === 'epi') detalhe = [`entregue a ${func.get(m.funcionarioId ?? '') ?? ''}`, m.ca && `CA ${m.ca}`, m.tamanho && `tam. ${m.tamanho}`].filter(Boolean).join(' · ');
     else if (m.tipo === 'devolucao') detalhe = `de ${local.get(m.localId ?? '') ?? ''}`;
     else if (m.tipo === 'transferencia') detalhe = `${local.get(m.localId ?? '') ?? ''} → ${local.get(m.localDestinoId ?? '') ?? ''}`;
     else detalhe = m.observacao ?? '';
@@ -117,6 +119,63 @@ export function relatorioHistorico(
     colunas: [
       { titulo: 'Data', tipo: 'texto' }, { titulo: 'Tipo', tipo: 'texto' }, { titulo: 'Detalhe', tipo: 'texto' },
       { titulo: 'Quantidade', tipo: 'numero' }, { titulo: 'Custo unit.', tipo: 'moeda' }, { titulo: 'Valor', tipo: 'moeda' }, { titulo: 'Saldo', tipo: 'numero' },
+    ],
+    linhas,
+  };
+}
+
+/** Ferramentas que estão fora do galpão, com quem, desde quando e se estão atrasadas. */
+export function relatorioFerramentasFora(
+  ferramentas: Ferramenta[], emprestimos: Emprestimo[], funcionarios: Funcionario[], locais: Local[], hoje: string,
+): Relatorio {
+  const ferr = new Map(ferramentas.map((f) => [f.id, f]));
+  const func = new Map(funcionarios.map((f) => [f.id, f.nome]));
+  const local = new Map(locais.map((l) => [l.id, l.nome]));
+  const abertos = emprestimosAbertos(emprestimos).sort((a, b) => a.prevista.localeCompare(b.prevista) || a.saida.localeCompare(b.saida));
+  const linhas: Linha[] = abertos.map((e) => {
+    const f = ferr.get(e.ferramentaId);
+    const dias = diasDeAtraso(e, hoje);
+    return {
+      celulas: [
+        f ? `${f.nome}${f.codigo ? ` ${f.codigo}` : ''}` : 'Ferramenta removida', func.get(e.funcionarioId) ?? '', local.get(e.localId ?? '') ?? '',
+        formatarDataBR(e.saida), formatarDataBR(e.prevista), atrasado(e, hoje) ? `Atrasada ${dias} ${dias === 1 ? 'dia' : 'dias'}` : 'No prazo',
+      ],
+    };
+  });
+  return {
+    titulo: 'Ferramentas fora do galpão', subtitulo: `Posição em ${formatarDataBR(hoje)} — ${abertos.length} ${abertos.length === 1 ? 'ferramenta' : 'ferramentas'}`,
+    arquivo: `Ferramentas_fora_${hoje}`,
+    colunas: [
+      { titulo: 'Ferramenta', tipo: 'texto' }, { titulo: 'Com', tipo: 'texto' }, { titulo: 'Frente de serviço', tipo: 'texto' },
+      { titulo: 'Saída', tipo: 'texto' }, { titulo: 'Devolução prevista', tipo: 'texto' }, { titulo: 'Situação', tipo: 'texto' },
+    ],
+    linhas,
+  };
+}
+
+/** Ficha de EPI: o que cada funcionário recebeu no período, com CA, tamanho e data de troca. */
+export function relatorioEpi(movs: Movimento[], itens: Item[], funcionarios: Funcionario[], periodo: Periodo, funcionarioId?: string): Relatorio {
+  const item = new Map(itens.map((i) => [i.id, i]));
+  const entregas = ordenarMovimentos(movs.filter((m) => m.tipo === 'epi' && !m.cancelado && m.data >= periodo.inicio && m.data <= periodo.fim
+    && (!funcionarioId || m.funcionarioId === funcionarioId)));
+  const porFuncionario = new Map<string, Movimento[]>();
+  for (const m of entregas) porFuncionario.set(m.funcionarioId ?? '', [...(porFuncionario.get(m.funcionarioId ?? '') ?? []), m]);
+  const nome = (id: string) => funcionarios.find((f) => f.id === id)?.nome ?? 'Funcionário removido';
+  const linhas: Linha[] = [];
+  for (const id of [...porFuncionario.keys()].sort((a, b) => nome(a).localeCompare(nome(b), 'pt-BR'))) {
+    linhas.push({ celulas: [nome(id), '', '', '', '', ''], estilo: 'grupo' });
+    for (const m of porFuncionario.get(id)!) {
+      const i = item.get(m.itemId);
+      linhas.push({ celulas: [formatarDataBR(m.data), i?.nome ?? m.itemId, m.quantidade, m.ca ?? '', m.tamanho ?? '', m.validade ? formatarDataBR(m.validade) : ''] });
+    }
+  }
+  return {
+    titulo: 'Entrega de EPI por funcionário',
+    subtitulo: `Período: ${periodoTexto(periodo)}${funcionarioId ? ` — ${nome(funcionarioId)}` : ''}`,
+    arquivo: `EPI_${periodo.inicio}_a_${periodo.fim}`,
+    colunas: [
+      { titulo: 'Data', tipo: 'texto' }, { titulo: 'EPI', tipo: 'texto' }, { titulo: 'Qtd.', tipo: 'numero' },
+      { titulo: 'CA', tipo: 'texto' }, { titulo: 'Tamanho', tipo: 'texto' }, { titulo: 'Trocar em', tipo: 'texto' },
     ],
     linhas,
   };

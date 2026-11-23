@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import type { Estoque } from '../dados/estoque';
 import { analisarDataBR, formatarDataBR, horaLocal, periodoDoMes, type Periodo } from '../domain/datas';
-import type { Item } from '../domain/tipos';
-import { relatorioGastos, relatorioHistorico, relatorioHtml, relatorioSaldo, type Relatorio } from '../relatorios/relatorios';
+import type { Funcionario, Item } from '../domain/tipos';
+import { relatorioEpi, relatorioFerramentasFora, relatorioGastos, relatorioHistorico, relatorioHtml, relatorioSaldo, type Relatorio } from '../relatorios/relatorios';
 import { Botao, Campo, Cartao, Mensagem, Seletor } from './componentes';
 import { estilos } from './estilos';
 
@@ -15,6 +15,7 @@ export interface SaidaRelatorio {
 interface Props { estoque: Estoque; hoje: string; agora: () => string; saida: SaidaRelatorio; versao?: number }
 
 type Formato = 'pdf' | 'xlsx';
+type Qual = 'saldo' | 'gastos' | 'historico' | 'ferramentas' | 'epi';
 
 export function RelatoriosTela({ estoque, hoje, agora, saida, versao = 0 }: Props) {
   const mes = periodoDoMes(hoje);
@@ -24,10 +25,14 @@ export function RelatoriosTela({ estoque, hoje, agora, saida, versao = 0 }: Prop
   const [itemId, setItemId] = useState<string>();
   const [deH, setDeH] = useState(formatarDataBR(mes.inicio));
   const [ateH, setAteH] = useState(formatarDataBR(hoje));
+  const [funcs, setFuncs] = useState<Funcionario[]>([]);
+  const [funcEpi, setFuncEpi] = useState<string>();
+  const [deE, setDeE] = useState(formatarDataBR(mes.inicio));
+  const [ateE, setAteE] = useState(formatarDataBR(hoje));
   const [erro, setErro] = useState<string>();
   const [gerando, setGerando] = useState(false);
 
-  useEffect(() => { void estoque.itens(true).then(setItens); }, [estoque, versao]);
+  useEffect(() => { void Promise.all([estoque.itens(true), estoque.funcionarios(true)]).then(([i, f]) => { setItens(i); setFuncs(f); }); }, [estoque, versao]);
 
   const periodo = (de: string, ate: string): Periodo => {
     const p = { inicio: analisarDataBR(de), fim: analisarDataBR(ate) };
@@ -35,7 +40,7 @@ export function RelatoriosTela({ estoque, hoje, agora, saida, versao = 0 }: Prop
     return p;
   };
 
-  async function gerar(qual: 'saldo' | 'gastos' | 'historico', formato: Formato) {
+  async function gerar(qual: Qual, formato: Formato) {
     setErro(undefined);
     try {
       const [movs, todos, locais, funcs, pos] = await Promise.all([
@@ -43,6 +48,8 @@ export function RelatoriosTela({ estoque, hoje, agora, saida, versao = 0 }: Prop
       ]);
       let r: Relatorio;
       if (qual === 'saldo') r = relatorioSaldo(todos, pos, hoje);
+      else if (qual === 'ferramentas') r = relatorioFerramentasFora(await estoque.ferramentas(true), await estoque.emprestimos(), funcs, locais, hoje);
+      else if (qual === 'epi') r = relatorioEpi(movs, todos, funcs, periodo(deE, ateE), funcEpi);
       else if (qual === 'gastos') r = relatorioGastos(movs, todos, locais, pos, periodo(deG, ateG));
       else {
         const it = todos.find((i) => i.id === itemId);
@@ -60,7 +67,7 @@ export function RelatoriosTela({ estoque, hoje, agora, saida, versao = 0 }: Prop
     }
   }
 
-  const botoes = (qual: 'saldo' | 'gastos' | 'historico') => (
+  const botoes = (qual: Qual) => (
     <View style={{ flexDirection: 'row', gap: 8 }}>
       <Botao testID={`${qual}-pdf`} titulo="PDF" secundario desativado={gerando} onPress={() => void gerar(qual, 'pdf')} />
       <Botao testID={`${qual}-xlsx`} titulo="Excel" secundario desativado={gerando} onPress={() => void gerar(qual, 'xlsx')} />
@@ -92,6 +99,22 @@ export function RelatoriosTela({ estoque, hoje, agora, saida, versao = 0 }: Prop
           <Campo testID="historico-ate" rotulo="Até" value={ateH} onChangeText={setAteH} style={{ flex: 1 }} keyboardType="numbers-and-punctuation" />
         </View>
         {botoes('historico')}
+      </Cartao>
+      <Text style={estilos.secao}>Ferramentas fora do galpão</Text>
+      <Cartao>
+        <Text style={estilos.subtitulo}>Quem está com cada ferramenta, desde quando e quais estão atrasadas.</Text>
+        {botoes('ferramentas')}
+      </Cartao>
+      <Text style={estilos.secao}>Entrega de EPI</Text>
+      <Cartao>
+        <Text style={estilos.subtitulo}>O que cada funcionário recebeu, com CA, tamanho e data de troca.</Text>
+        <Seletor testID="epi-func" rotulo="Funcionário (vazio = todos)" valor={funcEpi} vazio="Todos os funcionários"
+          opcoes={funcs.map((f) => ({ id: f.id, titulo: f.nome }))} onEscolher={setFuncEpi} />
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Campo testID="epi-de" rotulo="De" value={deE} onChangeText={setDeE} style={{ flex: 1 }} keyboardType="numbers-and-punctuation" />
+          <Campo testID="epi-ate" rotulo="Até" value={ateE} onChangeText={setAteE} style={{ flex: 1 }} keyboardType="numbers-and-punctuation" />
+        </View>
+        {botoes('epi')}
       </Cartao>
     </ScrollView>
   );

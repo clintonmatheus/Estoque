@@ -25,7 +25,15 @@ saídas para as frentes de serviço, devoluções, transferências, inventário 
 
 **Atualização (categorias):** quem já rodou o `001`, rode também `supabase/003_categorias.sql` (uma vez).
 
+**Atualização (Etapa 2 — ferramentas e EPI):** rode também `supabase/004_ferramentas_epi.sql` (uma vez). Ele cria as tabelas de ferramentas e empréstimos e faz o saldo do consultor descontar o EPI entregue.
+
 As permissões foram testadas num Postgres local: `bash supabase/teste/rodar.sh`.
+
+## Etapa 2: ferramentas e EPI
+
+- **Ferramentas (Mais → Ferramentas):** cada unidade é cadastrada à parte (Cadastros → Ferramentas, ex.: Furadeira 03). Empréstimo com quem retirou, frente de serviço (opcional), saída e **data prevista de devolução** (sugestão de 7 dias). Mostra o que está fora, com quem, e destaca as **atrasadas**. Devolução com data e estado da ferramenta; histórico por ferramenta.
+- **EPI (Lançar → EPI):** entrega a um funcionário baixa o estoque pelo PEPS, com **CA, tamanho e data de troca**. Não entra no custo por centro de custo. **Mais → EPI dos funcionários** lista trocas vencidas ou a vencer em 30 dias e a ficha de cada funcionário.
+- **Relatórios novos:** ferramentas fora do galpão; entrega de EPI por funcionário (PDF e Excel).
 
 ## Instalar
 

@@ -48,9 +48,10 @@ export interface Funcionario { id: string; nome: string; ativo: boolean; criado:
 /**
  * entrada: compra (ou sobra sem obra de origem) que entra no galpão;
  * saida: galpão → frente de serviço; devolucao: sobra da frente → galpão;
- * transferencia: frente → outra frente (não passa pelo galpão); ajuste: correção de inventário (+/-).
+ * transferencia: frente → outra frente (não passa pelo galpão); ajuste: correção de inventário (+/-);
+ * epi: entrega de EPI a um funcionário (baixa o galpão, sem custo para frente/centro de custo).
  */
-export type TipoMovimento = 'entrada' | 'saida' | 'devolucao' | 'transferencia' | 'ajuste';
+export type TipoMovimento = 'entrada' | 'saida' | 'devolucao' | 'transferencia' | 'ajuste' | 'epi';
 
 export interface Movimento {
   id: string;
@@ -73,7 +74,47 @@ export interface Movimento {
   /** Quem retirou (saída) ou devolveu. */
   funcionarioId?: string;
   observacao?: string;
+  /** EPI: número do Certificado de Aprovação. */
+  ca?: string;
+  /** EPI: tamanho/numeração entregue (ex.: "42", "G"). */
+  tamanho?: string;
+  /** EPI: data (AAAA-MM-DD) em que o equipamento deve ser trocado. */
+  validade?: string;
   criado: Autoria;
+  alterado?: Autoria;
+  cancelado?: Autoria & { motivo: string };
+}
+
+/** Ferramenta individual (ex.: "Furadeira 03"), emprestada a funcionários. */
+export interface Ferramenta {
+  id: string;
+  nome: string;
+  /** Número/etiqueta da unidade (ex.: "03"). */
+  codigo?: string;
+  ativo: boolean;
+  criado: Autoria;
+  alterado?: Autoria;
+}
+
+/** Saída de uma ferramenta com um funcionário, com data prevista de devolução. */
+export interface Emprestimo {
+  id: string;
+  ferramentaId: string;
+  funcionarioId: string;
+  /** Frente de serviço onde será usada (opcional). */
+  localId?: string;
+  /** Dia em que saiu do galpão. */
+  saida: string;
+  /** Dia previsto para a devolução. */
+  prevista: string;
+  /** Dia em que voltou (vazio enquanto está fora). */
+  devolvidoEm?: string;
+  observacao?: string;
+  /** Estado em que voltou (ex.: "cabo quebrado"). */
+  observacaoDevolucao?: string;
+  criado: Autoria;
+  /** Quem registrou a devolução. */
+  devolvido?: Autoria;
   alterado?: Autoria;
   cancelado?: Autoria & { motivo: string };
 }

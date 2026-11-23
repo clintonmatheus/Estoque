@@ -54,6 +54,7 @@ export function HistoricoTela({ estoque, versao = 0, onAlterou }: Props) {
     const m = g.linhas[0];
     if (g.tipo === 'entrada') return [m.fornecedor, m.notaFiscal && `NF ${m.notaFiscal}`].filter(Boolean).join(' · ') || 'Sem nota fiscal';
     if (g.tipo === 'saida') return `${nomeLocal(m.localId)}${m.funcionarioId ? ` · ${funcs.find((f) => f.id === m.funcionarioId)?.nome ?? ''}` : ''}`;
+    if (g.tipo === 'epi') return `para ${funcs.find((f) => f.id === m.funcionarioId)?.nome ?? ''}`;
     if (g.tipo === 'devolucao') return `de ${nomeLocal(m.localId)}`;
     if (g.tipo === 'transferencia') return `${nomeLocal(m.localId)} → ${nomeLocal(m.localDestinoId)}`;
     return m.observacao ?? '';
@@ -78,7 +79,7 @@ export function HistoricoTela({ estoque, versao = 0, onAlterou }: Props) {
       ListHeaderComponent={
         <Chips prefixo="tipo" valor={filtro} onMudar={setFiltro} opcoes={[
           { id: 'todos', titulo: 'Todos' }, { id: 'entrada', titulo: 'Entradas' }, { id: 'saida', titulo: 'Saídas' },
-          { id: 'devolucao', titulo: 'Devoluções' }, { id: 'transferencia', titulo: 'Transferências' }, { id: 'ajuste', titulo: 'Ajustes' },
+          { id: 'devolucao', titulo: 'Devoluções' }, { id: 'transferencia', titulo: 'Transferências' }, { id: 'epi', titulo: 'EPI' }, { id: 'ajuste', titulo: 'Ajustes' },
         ]} />
       }
       ListEmptyComponent={<Text style={estilos.subtitulo}>Nenhum lançamento.</Text>}
@@ -121,6 +122,9 @@ function DetalheLancamento({ estoque, grupo, itens, locais, funcionarios, posica
   const [linhaEditada, setLinhaEditada] = useState<string>();
   const [qtd, setQtd] = useState('');
   const [custo, setCusto] = useState('');
+  const [ca, setCa] = useState('');
+  const [tamanho, setTamanho] = useState('');
+  const [validade, setValidade] = useState('');
   const [motivo, setMotivo] = useState('');
   const [cancelando, setCancelando] = useState<string>();
   const [erro, setErro] = useState<string>();
@@ -141,7 +145,7 @@ function DetalheLancamento({ estoque, grupo, itens, locais, funcionarios, posica
       data: analisarDataBR(data), notaFiscal: nf, fornecedor, observacao: obs,
       ...(grupo.tipo !== 'entrada' && grupo.tipo !== 'ajuste' ? { localId } : {}),
       ...(grupo.tipo === 'transferencia' ? { localDestinoId: destinoId } : {}),
-      ...(grupo.tipo === 'saida' || grupo.tipo === 'devolucao' ? { funcionarioId } : {}),
+      ...(grupo.tipo === 'saida' || grupo.tipo === 'devolucao' || grupo.tipo === 'epi' ? { funcionarioId } : {}),
     });
     setEditandoCab(false);
   });
@@ -150,7 +154,8 @@ function DetalheLancamento({ estoque, grupo, itens, locais, funcionarios, posica
     const q = lerNumero(qtd);
     const it = item(m.itemId);
     if (q === undefined || (grupo.tipo !== 'ajuste' && q <= 0)) throw new Error('Quantidade inválida');
-    const campos: { quantidade: number; custoUnitario?: number } = { quantidade: q };
+    const campos: { quantidade: number; custoUnitario?: number; ca?: string; tamanho?: string; validade?: string } = { quantidade: q };
+    if (grupo.tipo === 'epi') Object.assign(campos, { ca, tamanho, validade: validade.trim() ? analisarDataBR(validade) : '' });
     if (grupo.tipo === 'entrada') {
       const c = lerNumero(custo);
       if (c === undefined || c < 0) throw new Error(`Informe o valor unitário${it ? ` (R$/${it.unidade})` : ''}`);
@@ -174,7 +179,7 @@ function DetalheLancamento({ estoque, grupo, itens, locais, funcionarios, posica
         {grupo.tipo === 'entrada' && <Text style={estilos.subtitulo}>{`Fornecedor: ${m0.fornecedor ?? '—'} · NF: ${m0.notaFiscal ?? '—'}`}</Text>}
         {m0.localId && <Text style={estilos.subtitulo}>{`${grupo.tipo === 'saida' ? 'Destino' : 'Origem'}: ${nomeLocal(m0.localId)}`}</Text>}
         {m0.localDestinoId && <Text style={estilos.subtitulo}>{`Destino: ${nomeLocal(m0.localDestinoId)}`}</Text>}
-        {m0.funcionarioId && <Text style={estilos.subtitulo}>{`${grupo.tipo === 'saida' ? 'Retirou' : 'Devolveu'}: ${funcionarios.find((f) => f.id === m0.funcionarioId)?.nome ?? '—'}`}</Text>}
+        {m0.funcionarioId && <Text style={estilos.subtitulo}>{`${grupo.tipo === 'saida' ? 'Retirou' : grupo.tipo === 'epi' ? 'Recebeu' : 'Devolveu'}: ${funcionarios.find((f) => f.id === m0.funcionarioId)?.nome ?? '—'}`}</Text>}
         {m0.observacao && <Text style={estilos.subtitulo}>{`Obs.: ${m0.observacao}`}</Text>}
         <Text style={estilos.subtitulo}>{`Lançado por ${quando(grupo.criado)}`}</Text>
         {grupo.tipo !== 'ajuste' && !editandoCab && grupo.linhas.some((m) => !m.cancelado) && (
@@ -189,10 +194,10 @@ function DetalheLancamento({ estoque, grupo, itens, locais, funcionarios, posica
                 <Campo testID="editar-fornecedor" rotulo="Fornecedor" value={fornecedor} onChangeText={setFornecedor} />
               </>
             )}
-            {grupo.tipo !== 'entrada' && <Seletor testID="editar-local" rotulo={grupo.tipo === 'saida' ? 'Destino' : 'Origem'} valor={localId} opcoes={opLocal} onEscolher={setLocalId} />}
+            {grupo.tipo !== 'entrada' && grupo.tipo !== 'epi' && <Seletor testID="editar-local" rotulo={grupo.tipo === 'saida' ? 'Destino' : 'Origem'} valor={localId} opcoes={opLocal} onEscolher={setLocalId} />}
             {grupo.tipo === 'transferencia' && <Seletor testID="editar-destino" rotulo="Destino" valor={destinoId} opcoes={opLocal} onEscolher={setDestinoId} />}
-            {(grupo.tipo === 'saida' || grupo.tipo === 'devolucao') && (
-              <Seletor testID="editar-funcionario" rotulo={grupo.tipo === 'saida' ? 'Quem retirou' : 'Quem devolveu'} valor={funcionarioId}
+            {(grupo.tipo === 'saida' || grupo.tipo === 'devolucao' || grupo.tipo === 'epi') && (
+              <Seletor testID="editar-funcionario" rotulo={grupo.tipo === 'saida' ? 'Quem retirou' : grupo.tipo === 'epi' ? 'Funcionário' : 'Quem devolveu'} valor={funcionarioId}
                 opcoes={funcionarios.filter((f) => f.ativo || f.id === funcionarioId).map((f) => ({ id: f.id, titulo: f.nome }))} onEscolher={setFuncionarioId} />
             )}
             <Campo testID="editar-obs" rotulo="Observação" value={obs} onChangeText={setObs} />
@@ -225,12 +230,18 @@ function DetalheLancamento({ estoque, grupo, itens, locais, funcionarios, posica
             <Text style={estilos.subtitulo}>
               {`${it ? formatarQuantidade(it, m.quantidade) : m.quantidade}${c ? ` · ${formatarMoeda(c.custoUnitario)}/${it?.unidade ?? 'un'} · ${formatarMoeda(c.valor)}` : ''}`}
             </Text>
+            {m.tipo === 'epi' && (m.ca || m.tamanho || m.validade) && (
+              <Text style={estilos.subtitulo}>
+                {[m.ca && `CA ${m.ca}`, m.tamanho && `tamanho ${m.tamanho}`, m.validade && `trocar em ${formatarDataBR(m.validade)}`].filter(Boolean).join(' · ')}
+              </Text>
+            )}
             {m.alterado && <Text testID={`editado-${m.id}`} style={estilos.subtitulo}>{`Editado por ${quando(m.alterado)}`}</Text>}
             {m.cancelado && <Text style={{ color: cores.erro }}>{`Cancelado por ${quando(m.cancelado)} — ${m.cancelado.motivo}`}</Text>}
             {!m.cancelado && linhaEditada !== m.id && cancelando !== m.id && (
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <Botao testID={`editar-${m.id}`} titulo="Editar" secundario onPress={() => {
                   setLinhaEditada(m.id); setQtd(String(m.quantidade).replace('.', ',')); setCusto(String(m.custoUnitario ?? '').replace('.', ','));
+                  setCa(m.ca ?? ''); setTamanho(m.tamanho ?? ''); setValidade(m.validade ? formatarDataBR(m.validade) : '');
                 }} />
                 <Botao testID={`cancelar-${m.id}`} titulo="Cancelar" perigo onPress={() => setCancelando(m.id)} />
               </View>
@@ -241,6 +252,15 @@ function DetalheLancamento({ estoque, grupo, itens, locais, funcionarios, posica
                   <Campo testID="editar-qtd" rotulo={`Quantidade (${it?.unidade ?? ''})`} value={qtd} onChangeText={setQtd} keyboardType="numbers-and-punctuation" style={{ flex: 1 }} />
                   {grupo.tipo === 'entrada' && <Campo testID="editar-custo" rotulo={`Valor unit. (R$/${it?.unidade ?? ''})`} value={custo} onChangeText={setCusto} keyboardType="decimal-pad" style={{ flex: 1 }} />}
                 </View>
+                {grupo.tipo === 'epi' && (
+                  <>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <Campo testID="editar-ca" rotulo="Nº do CA" value={ca} onChangeText={setCa} style={{ flex: 1 }} />
+                      <Campo testID="editar-tamanho" rotulo="Tamanho" value={tamanho} onChangeText={setTamanho} style={{ flex: 1 }} />
+                    </View>
+                    <Campo testID="editar-validade" rotulo="Trocar em (dd/mm/aaaa)" value={validade} onChangeText={setValidade} keyboardType="numbers-and-punctuation" />
+                  </>
+                )}
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <Botao titulo="Desistir" secundario onPress={() => setLinhaEditada(undefined)} />
                   <Botao testID="salvar-linha" titulo="Salvar" onPress={() => void salvarLinha(m)} />

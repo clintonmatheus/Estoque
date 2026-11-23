@@ -93,6 +93,14 @@ export function calcularPosicao(movs: Movimento[], custoReferencia: Record<strin
         n.valor += valor;
         break;
       }
+      case 'epi': {
+        // Entrega a funcionário: baixa o galpão pelo PEPS e não vai para nenhuma frente de serviço.
+        const antes = s.quantidade;
+        const { valor, faltou } = consumir(s, mv.quantidade);
+        if (faltou) p.problemas.push({ movimentoId: mv.id, itemId: mv.itemId, disponivel: Math.max(0, antes) });
+        custo = { valor, custoUnitario: valor / mv.quantidade };
+        break;
+      }
       case 'devolucao': {
         custo = tirarDoLocal(mv, mv.localId ?? '');
         acrescentar(s, mv.quantidade, custo.custoUnitario);

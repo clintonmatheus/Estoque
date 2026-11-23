@@ -91,4 +91,22 @@ describe('Sincronizador', () => {
     const [r1, r2] = await Promise.all([a.sync.sincronizar(), a.sync.sincronizar()]);
     expect(r1).toBe(r2);
   });
+
+  it('ferramentas, empréstimos e entregas de EPI sincronizam entre aparelhos', async () => {
+    const { a, b, tinta, joao } = await preparar();
+    await a.estoque.lancar({ tipo: 'entrada', data: '2026-11-10', linhas: [{ itemId: tinta.id, quantidade: 10, custoUnitario: 50 }] });
+    const f = await a.estoque.salvarFerramenta({ nome: 'Furadeira', codigo: '01', ativo: true });
+    const e = await a.estoque.emprestar({ ferramentaId: f.id, funcionarioId: joao.id, saida: '2026-11-10', prevista: '2026-11-17' });
+    await a.estoque.lancar({ tipo: 'epi', data: '2026-11-10', funcionarioId: joao.id, linhas: [{ itemId: tinta.id, quantidade: 1, ca: '77' }] });
+    await a.sync.sincronizar();
+    await b.sync.sincronizar();
+    expect((await b.estoque.emprestimos()).map((x) => x.id)).toEqual([e.id]);
+    expect((await b.estoque.ferramentas())[0].nome).toBe('FURADEIRA');
+    expect((await b.estoque.posicao()).itens[tinta.id].quantidade).toBe(9);
+    // devolução registrada no outro aparelho volta para o primeiro
+    await b.estoque.devolverFerramenta(e.id, { devolvidoEm: '2026-11-12' });
+    await b.sync.sincronizar();
+    await a.sync.sincronizar();
+    expect((await a.estoque.emprestimos())[0].devolvidoEm).toBe('2026-11-12');
+  });
 });
