@@ -31,6 +31,7 @@ async function montarFinanceiro(): Promise<void> {
   const [aln, passos] = await f.empresas();
   await f.salvarEmpresa({ ...aln, cnpj: '11.222.333/0001-81' }); // CNPJ fictício (exemplo)
   const rmg = await f.salvarCentro({ nome: 'RMG ÁGUA', empresaId: aln.id, apelidos: ['CAIXA RMG'], ativo: true });
+  await f.salvarCustoFixo(rmg.id, { descricao: 'Despesa geral', tipo: 'Despesa geral', valor: 20000, inicio: '2026-08' });
   for (const n of ['RMG MACAIBA', 'RMG PUREZA', 'RMG PEDRA GRANDE', 'RMG SÃO PEDRO DO POTENGI']) await f.salvarFrente({ nome: n, centroId: rmg.id, ativo: true });
   const funpec = await f.salvarCentro({ nome: 'FUNPEC', empresaId: passos.id, apelidos: ['CAIXA FUNPEC'], ativo: true });
   await f.salvarFrente({ nome: 'FUNPEC', centroId: funpec.id, ativo: true });

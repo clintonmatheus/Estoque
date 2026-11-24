@@ -217,6 +217,31 @@ export interface CentroCusto {
   especial?: CentroEspecial;
   /** Outras grafias usadas nas planilhas (ex.: "RMG AGUA"). */
   apelidos: string[];
+  /** Custos que entram todo mês (ex.: despesa geral de R$ 20.000 do RMG Água). */
+  custosFixos?: CustoFixo[];
+  ativo: boolean;
+  criado: Autoria;
+  alterado?: Autoria;
+}
+
+/** Custo lançado sozinho no último dia de cada mês, de `inicio` até `fim` (inclusive), no formato AAAA-MM. */
+export interface CustoFixo {
+  id: string;
+  descricao: string;
+  /** Nome do tipo de despesa (ex.: "Despesa geral"). */
+  tipo: string;
+  valor: number;
+  inicio: string;
+  fim?: string;
+}
+
+/** Percentual de encargos sociais sobre a folha, com histórico: cada vigência vale a partir do mês indicado. */
+export interface Encargo {
+  id: string;
+  nome: string;
+  /** A quem se aplica (texto livre). */
+  descricao?: string;
+  vigencias: { desde: string; percentual: number }[];
   ativo: boolean;
   criado: Autoria;
   alterado?: Autoria;

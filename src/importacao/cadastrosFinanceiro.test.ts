@@ -34,7 +34,7 @@ describe('planilha de cadastros do financeiro', () => {
     expect(sim.erros).toEqual([]);
     expect(await financeiro.empresas()).toEqual([]); // simulação não grava
     const r = await importarCadastrosFinanceiro(financeiro, cad);
-    expect(r).toEqual({ empresas: 2, contas: 6, centros: 13, frentes: 20, frentesLigadas: 3, fornecedores: 1, tipos: 19, existentes: 0 });
+    expect(r).toEqual({ empresas: 2, contas: 6, centros: 13, frentes: 20, frentesLigadas: 3, fornecedores: 1, tipos: 20, fixos: 2, encargos: 2, encargosAlterados: 0, existentes: 0 });
     expect(sim.resumo).toEqual(r);
 
     const sms = (await financeiro.frentes()).filter((f) => f.nome === 'SMS');
@@ -50,7 +50,11 @@ describe('planilha de cadastros do financeiro', () => {
     expect((await financeiro.fornecedores())[0]).toMatchObject({ nome: 'Aço Potiguar', documento: '05948553000275', chavePix: '05948553000275', forma: 'pix' });
 
     const de_novo = await importarCadastrosFinanceiro(financeiro, cad);
-    expect(de_novo).toEqual({ empresas: 0, contas: 0, centros: 0, frentes: 0, frentesLigadas: 0, fornecedores: 0, tipos: 0, existentes: 2 + 6 + 13 + 21 + 1 + 19 });
+    expect(de_novo).toEqual({ empresas: 0, contas: 0, centros: 0, frentes: 0, frentesLigadas: 0, fornecedores: 0, tipos: 0, fixos: 0, encargos: 0, encargosAlterados: 0, existentes: 2 + 6 + 13 + 21 + 1 + 20 + 2 + 2 });
+    expect(rmg.custosFixos).toEqual([expect.objectContaining({ descricao: 'Despesa geral', tipo: 'Despesa geral', valor: 20000, inicio: '2026-08' })]);
+    expect((await financeiro.encargos()).map((x) => [x.nome, x.vigencias])).toEqual([
+      ['Encargos da folha', [{ desde: '2000-01', percentual: 37.77 }]], ['Encargos especiais', [{ desde: '2000-01', percentual: 67.05 }]],
+    ]);
   });
 
   it('erros vêm com aba e linha; CNPJ digitado como número recupera o zero da frente', async () => {
@@ -74,5 +78,25 @@ describe('planilha de cadastros do financeiro', () => {
       'Frentes de serviço 2: Centro de custo "Saúde" não encontrado',
       'Fornecedores 4: Informe a chave Pix (forma de pagamento Pix)',
     ]);
+  });
+
+  it('encargo existente: novo percentual só com o mês; mês do Excel como data também vale', async () => {
+    const { financeiro } = financeiroDeTeste();
+    await financeiro.criarCadastrosIniciais();
+    const rmg = await financeiro.salvarCentro({ nome: 'RMG ÁGUA', ativo: true });
+    const bytes = await planilha({
+      Encargos: [cab('encargos'), ['Encargos da folha', '36,00'], ['Encargos especiais', 60, '01/2027']],
+      'Custos fixos': [cab('fixos'), ['RMG AGUA', 'Despesa geral', 'Despesa geral', 20000, 46235]],
+    });
+    const cad = lerCadastrosFinanceiro(await lerXlsx(bytes));
+    expect(cad.fixos[0].inicio).toBe('2026-08'); // 01/08/2026 como data do Excel
+    const { erros } = await simularCadastrosFinanceiro(financeiro, cad);
+    expect(erros.map((x) => `${x.aba} ${x.linha}: ${x.mensagem}`)).toEqual([
+      'Encargos 2: O encargo Encargos da folha já existe com outro percentual: informe a partir de qual mês vale o novo',
+    ]);
+    const r = await importarCadastrosFinanceiro(financeiro, { ...cad, encargos: cad.encargos.slice(1) });
+    expect(r).toMatchObject({ fixos: 1, encargosAlterados: 1 });
+    expect((await financeiro.encargos()).find((e) => e.nome === 'Encargos especiais')?.vigencias).toEqual([{ desde: '2000-01', percentual: 67.05 }, { desde: '2027-01', percentual: 60 }]);
+    expect((await financeiro.centros()).find((c) => c.id === rmg.id)?.custosFixos?.[0].valor).toBe(20000);
   });
 });

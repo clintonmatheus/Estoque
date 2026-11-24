@@ -143,5 +143,12 @@ export const TIPOS_DESPESA_INICIAIS: { nome: string; apelidos: string[] }[] = [
   { nome: 'Ferramenta', apelidos: [] },
   { nome: 'Transporte', apelidos: [] },
   { nome: 'Imposto', apelidos: [] },
+  { nome: 'Despesa geral', apelidos: [] },
   { nome: 'Outros', apelidos: [] },
+];
+
+/** Encargos iniciais: os percentuais da planilha de presença (editáveis; cada mudança vale a partir de um mês). */
+export const ENCARGOS_INICIAIS: { nome: string; descricao: string; percentual: number }[] = [
+  { nome: 'Encargos da folha', descricao: 'Percentual geral da planilha de presença (serventes, profissionais, produção e salários fixos)', percentual: 37.77 },
+  { nome: 'Encargos especiais', descricao: 'Percentual maior usado em caso individual na planilha de presença', percentual: 67.05 },
 ];

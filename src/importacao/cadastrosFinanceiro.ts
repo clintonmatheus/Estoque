@@ -1,8 +1,9 @@
-import type { Financeiro } from '../dados/financeiro';
+import { DESDE_SEMPRE, type Financeiro } from '../dados/financeiro';
+import { lerMes } from '../domain/meses';
 import { acharPorNome, chaveNome, cpfValido, juntarApelidos, soNumeros } from '../domain/nomes';
 import { DIAS_SEMANA, type CentroEspecial, type DiaSemana, type FormaPagamento } from '../domain/tipos';
-import type { Abas, Celula } from './lerXlsx';
-import { linhasDaAba, normalizar, opcao, texto, type ErroImportacao } from './levantamento';
+import { dataDaCelula, type Abas, type Celula } from './lerXlsx';
+import { linhasDaAba, normalizar, numero, opcao, texto, type ErroImportacao } from './levantamento';
 
 /** Abas e cabeçalhos da planilha de cadastros do financeiro (modelos/Cadastros_Financeiro.xlsx). */
 export const ABAS_FIN = {
@@ -12,6 +13,8 @@ export const ABAS_FIN = {
   frentes: { nome: 'Frentes de serviço', colunas: ['Frente de serviço', 'Centro de custo'] },
   fornecedores: { nome: 'Fornecedores', colunas: ['Nome', 'CPF ou CNPJ', 'Chave Pix', 'Forma de pagamento', 'Dia de fechamento', 'Outros nomes', 'Observação'] },
   tipos: { nome: 'Tipos de despesa', colunas: ['Tipo de despesa', 'Outros nomes'] },
+  fixos: { nome: 'Custos fixos', colunas: ['Centro de custo', 'Descrição', 'Tipo de despesa', 'Valor mensal (R$)', 'Desde (mm/aaaa)', 'Até (mm/aaaa)'] },
+  encargos: { nome: 'Encargos', colunas: ['Nome', 'Percentual (%)', 'A partir de (mm/aaaa)', 'A quem se aplica'] },
 } as const;
 
 interface ComLinha { linha: number }
@@ -22,6 +25,8 @@ export interface CadastrosFinanceiro {
   frentes: (ComLinha & { nome: string; centro: string })[];
   fornecedores: (ComLinha & { nome: string; documento?: string; chavePix?: string; forma: FormaPagamento; diaFechamento?: DiaSemana; apelidos: string[]; observacao?: string })[];
   tipos: (ComLinha & { nome: string; apelidos: string[] })[];
+  fixos: (ComLinha & { centro: string; descricao: string; tipo: string; valor: number; inicio: string; fim?: string })[];
+  encargos: (ComLinha & { nome: string; percentual: number; desde?: string; descricao?: string })[];
   erros: ErroImportacao[];
 }
 
@@ -44,6 +49,15 @@ const SITUACOES: Record<string, 'ativo' | 'parado'> = { ativo: 'ativo', ativa: '
 const FORMAS: Record<string, FormaPagamento> = { pix: 'pix', boleto: 'boleto', 'fatura semanal': 'fatura', fatura: 'fatura', 'a faturar': 'fatura' };
 const DIAS = Object.fromEntries(DIAS_SEMANA.flatMap((d) => [[normalizar(d.titulo), d.id], [normalizar(d.titulo.slice(0, 3)), d.id], [`${normalizar(d.titulo)}-feira`, d.id]])) as Record<string, DiaSemana>;
 
+/** Mês: texto mm/aaaa ou data do Excel (o Excel costuma transformar "08/2026" em 01/08/2026). */
+function mesDaCelula(c: Celula): string | undefined {
+  if (c === undefined || c === '') return undefined;
+  if (typeof c === 'number') return dataDaCelula(c)!.slice(0, 7);
+  const t = String(c).trim();
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(t)) return dataDaCelula(t)!.slice(0, 7);
+  return lerMes(t);
+}
+
 /** Opção de lista com mensagem curta (as variações aceitas não aparecem no erro). */
 function escolha<T extends string>(c: Celula, valores: Record<string, T>, campo: string, aceitos: string): T | undefined {
   try { return opcao(c, valores, campo); } catch { throw new Error(`${campo} inválido: "${texto(c)}" (use ${aceitos})`); }
@@ -51,7 +65,7 @@ function escolha<T extends string>(c: Celula, valores: Record<string, T>, campo:
 
 /** Interpreta a planilha e confere o formato de cada linha. Ligações por nome (empresa, centro) são conferidas na importação. */
 export function lerCadastrosFinanceiro(abas: Abas): CadastrosFinanceiro {
-  const r: CadastrosFinanceiro = { empresas: [], contas: [], centros: [], frentes: [], fornecedores: [], tipos: [], erros: [] };
+  const r: CadastrosFinanceiro = { empresas: [], contas: [], centros: [], frentes: [], fornecedores: [], tipos: [], fixos: [], encargos: [], erros: [] };
   const cada = <T>(aba: { nome: string; colunas: readonly string[] }, f: (v: (c: string) => Celula, linha: number) => T, destino: T[]) => {
     for (const { linha, v } of linhasDaAba(abas, aba, r.erros)) {
       try { destino.push(f(v, linha)); } catch (e) { r.erros.push({ aba: aba.nome, linha, mensagem: (e as Error).message }); }
@@ -91,18 +105,36 @@ export function lerCadastrosFinanceiro(abas: Abas): CadastrosFinanceiro {
     };
   }, r.fornecedores);
   cada(ABAS_FIN.tipos, (v, linha) => ({ linha, nome: exigir(v('Tipo de despesa'), 'Informe o tipo de despesa'), apelidos: lista(v('Outros nomes')) }), r.tipos);
+  cada(ABAS_FIN.fixos, (v, linha) => {
+    const valor = numero(v('Valor mensal (R$)'));
+    if (!valor || valor <= 0) throw new Error('Informe o valor mensal');
+    const inicio = mesDaCelula(v('Desde (mm/aaaa)'));
+    if (!inicio) throw new Error('Informe desde quando vale (mm/aaaa)');
+    const fim = mesDaCelula(v('Até (mm/aaaa)'));
+    return {
+      linha, centro: exigir(v('Centro de custo'), 'Informe o centro de custo'), descricao: exigir(v('Descrição'), 'Informe a descrição'),
+      tipo: exigir(v('Tipo de despesa'), 'Informe o tipo de despesa'), valor, inicio, ...(fim ? { fim } : {}),
+    };
+  }, r.fixos);
+  cada(ABAS_FIN.encargos, (v, linha) => {
+    const percentual = numero(v('Percentual (%)'));
+    if (percentual === undefined) throw new Error('Informe o percentual');
+    const desde = mesDaCelula(v('A partir de (mm/aaaa)'));
+    return { linha, nome: exigir(v('Nome'), 'Informe o nome'), percentual, ...(desde ? { desde } : {}), descricao: texto(v('A quem se aplica')) };
+  }, r.encargos);
   return r;
 }
 
 export interface ResumoCadastros {
   empresas: number; contas: number; centros: number; frentes: number; frentesLigadas: number; fornecedores: number; tipos: number;
+  fixos: number; encargos: number; encargosAlterados: number;
   /** Já existiam no app (ficaram como estavam; outros nomes novos foram acrescentados). */
   existentes: number;
 }
 
 /** Grava os cadastros. Com `erros`, anota e segue (simulação); sem `erros`, para no primeiro problema com aba e linha. */
 export async function importarCadastrosFinanceiro(fin: Financeiro, cad: CadastrosFinanceiro, erros?: ErroImportacao[]): Promise<ResumoCadastros> {
-  const r: ResumoCadastros = { empresas: 0, contas: 0, centros: 0, frentes: 0, frentesLigadas: 0, fornecedores: 0, tipos: 0, existentes: 0 };
+  const r: ResumoCadastros = { empresas: 0, contas: 0, centros: 0, frentes: 0, frentesLigadas: 0, fornecedores: 0, tipos: 0, fixos: 0, encargos: 0, encargosAlterados: 0, existentes: 0 };
   const falha = (aba: string, linha: number, e: unknown) => {
     const mensagem = (e as Error).message;
     if (!erros) throw new Error(`${aba}, linha ${linha}: ${mensagem}`);
@@ -195,6 +227,32 @@ export async function importarCadastrosFinanceiro(fin: Financeiro, cad: Cadastro
       }
       await fin.salvarTipo({ nome: l.nome, apelidos: l.apelidos, ativo: true });
       r.tipos++;
+    });
+  }
+
+  for (const l of cad.fixos) {
+    await tentar(ABAS_FIN.fixos.nome, l.linha, async () => {
+      const centro = acharPorNome(await fin.centros(true), l.centro);
+      if (!centro) throw new Error(`Centro de custo "${l.centro}" não encontrado`);
+      if ((centro.custosFixos ?? []).some((c) => chaveNome(c.descricao) === chaveNome(l.descricao) && c.inicio === l.inicio)) { r.existentes++; return; }
+      await fin.salvarCustoFixo(centro.id, { descricao: l.descricao, tipo: l.tipo, valor: l.valor, inicio: l.inicio, ...(l.fim ? { fim: l.fim } : {}) });
+      r.fixos++;
+    });
+  }
+
+  for (const l of cad.encargos) {
+    await tentar(ABAS_FIN.encargos.nome, l.linha, async () => {
+      const atual = (await fin.encargos(true)).find((e) => chaveNome(e.nome) === chaveNome(l.nome));
+      if (!atual) {
+        await fin.salvarEncargo({ nome: l.nome, descricao: l.descricao, percentual: l.percentual, desde: l.desde ?? DESDE_SEMPRE, ativo: true });
+        r.encargos++;
+        return;
+      }
+      const vigente = l.desde ? atual.vigencias.find((v) => v.desde === l.desde) : [...atual.vigencias].sort((a, b) => a.desde.localeCompare(b.desde)).pop();
+      if (vigente && vigente.percentual === l.percentual) { r.existentes++; return; }
+      if (!l.desde) throw new Error(`O encargo ${atual.nome} já existe com outro percentual: informe a partir de qual mês vale o novo`);
+      await fin.definirPercentual(atual.id, l.desde, l.percentual);
+      r.encargosAlterados++;
     });
   }
   return r;

@@ -1,22 +1,26 @@
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import type { Financeiro, FrentesSemCentro } from '../dados/financeiro';
+import { formatarMoeda, lerNumero } from '../domain/formato';
+import { formatarMes, lerMes, percentualNoMes } from '../domain/meses';
 import { formatarDocumento, lerChavePix, NOME_TIPO_CHAVE } from '../domain/nomes';
 import {
-  DIAS_SEMANA, FORMAS_PAGAMENTO, type CentroCusto, type CentroEspecial, type ContaBancaria, type DiaSemana, type Empresa, type FormaPagamento,
+  DIAS_SEMANA, FORMAS_PAGAMENTO, type CentroCusto, type CentroEspecial, type ContaBancaria, type CustoFixo, type Encargo, type DiaSemana, type Empresa, type FormaPagamento,
   type Fornecedor, type Local, type TipoDespesa,
 } from '../domain/tipos';
 import { Botao, Campo, Cartao, Chips, filtrar, Mensagem, Seletor } from './componentes';
 import { cores, estilos } from './estilos';
 import { ImportarFinanceiroTela } from './ImportarFinanceiroTela';
 
-export type AbaFinanceiro = 'empresas' | 'centros' | 'fornecedores' | 'tipos' | 'importar';
+export type AbaFinanceiro = 'empresas' | 'centros' | 'fornecedores' | 'tipos' | 'encargos' | 'importar';
 
 interface Dados {
-  empresas: Empresa[]; contas: ContaBancaria[]; centros: CentroCusto[]; frentes: Local[]; fornecedores: Fornecedor[]; tipos: TipoDespesa[];
+  empresas: Empresa[]; contas: ContaBancaria[]; centros: CentroCusto[]; frentes: Local[]; fornecedores: Fornecedor[]; tipos: TipoDespesa[]; encargos: Encargo[];
   semCentro: FrentesSemCentro[];
 }
-const VAZIO: Dados = { empresas: [], contas: [], centros: [], frentes: [], fornecedores: [], tipos: [], semCentro: [] };
+const VAZIO: Dados = { empresas: [], contas: [], centros: [], frentes: [], fornecedores: [], tipos: [], encargos: [], semCentro: [] };
+const mesAtual = () => new Date().toISOString().slice(0, 7);
+const pct = (n: number) => `${String(n).replace('.', ',')}%`;
 
 const NOME_ESPECIAL: Record<CentroEspecial, string> = { administracao: 'Administração (rateado entre as obras)', galpao: 'Estoque/Galpão' };
 const nomeForma = (f: FormaPagamento) => FORMAS_PAGAMENTO.find((x) => x.id === f)!.titulo;
@@ -29,7 +33,9 @@ type Edicao =
   | { tipo: 'centro'; id?: string }
   | { tipo: 'frente'; id?: string; centroId: string }
   | { tipo: 'fornecedor'; id?: string }
-  | { tipo: 'tipo'; id?: string };
+  | { tipo: 'tipo'; id?: string }
+  | { tipo: 'custoFixo'; id?: string; centroId: string }
+  | { tipo: 'encargo'; id?: string };
 
 interface Props {
   financeiro: Financeiro; versao?: number; onAlterou?: () => void; abaInicial?: AbaFinanceiro;
@@ -50,8 +56,8 @@ export function FinanceiroTela({ financeiro, versao = 0, onAlterou, abaInicial =
   useEffect(() => {
     void Promise.all([
       financeiro.empresas(true), financeiro.contas(true), financeiro.centros(true), financeiro.frentes(true),
-      financeiro.fornecedores(true), financeiro.tipos(true), financeiro.frentesSemCentro(),
-    ]).then(([empresas, contas, centros, frentes, fornecedores, tipos, semCentro]) => setD({ empresas, contas, centros, frentes, fornecedores, tipos, semCentro }));
+      financeiro.fornecedores(true), financeiro.tipos(true), financeiro.encargos(true), financeiro.frentesSemCentro(),
+    ]).then(([empresas, contas, centros, frentes, fornecedores, tipos, encargos, semCentro]) => setD({ empresas, contas, centros, frentes, fornecedores, tipos, encargos, semCentro }));
   }, [financeiro, versao, recarregar]);
 
   const atualizar = (ok?: string) => { setEdicao(undefined); setRecarregar((n) => n + 1); setMsg({ ok }); onAlterou?.(); };
@@ -63,8 +69,16 @@ export function FinanceiroTela({ financeiro, versao = 0, onAlterou, abaInicial =
     if (edicao.tipo === 'conta') return <FormConta financeiro={financeiro} conta={d.contas.find((c) => c.id === edicao.id)} empresa={empresa(edicao.empresaId)!} onFim={atualizar} onVoltar={voltar} />;
     if (edicao.tipo === 'centro') {
       return <FormCentro financeiro={financeiro} centro={d.centros.find((c) => c.id === edicao.id)} empresas={d.empresas.filter((e) => e.ativo)}
-        frentes={d.frentes.filter((f) => f.centroId && f.centroId === edicao.id)} onFrente={(id) => setEdicao({ tipo: 'frente', id, centroId: edicao.id! })} onFim={atualizar} onVoltar={voltar} />;
+        frentes={d.frentes.filter((f) => f.centroId && f.centroId === edicao.id)} onFrente={(id) => setEdicao({ tipo: 'frente', id, centroId: edicao.id! })}
+        onCustoFixo={(id) => setEdicao({ tipo: 'custoFixo', id, centroId: edicao.id! })} onFim={atualizar} onVoltar={voltar} />;
     }
+    if (edicao.tipo === 'custoFixo') {
+      const centro = d.centros.find((c) => c.id === edicao.centroId)!;
+      const volta = () => setEdicao({ tipo: 'centro', id: edicao.centroId });
+      return <FormCustoFixo financeiro={financeiro} centro={centro} custo={centro.custosFixos?.find((c) => c.id === edicao.id)} tipos={d.tipos.filter((t) => t.ativo)}
+        onFim={() => { setRecarregar((n) => n + 1); onAlterou?.(); volta(); }} onVoltar={volta} />;
+    }
+    if (edicao.tipo === 'encargo') return <FormEncargo financeiro={financeiro} encargo={d.encargos.find((e) => e.id === edicao.id)} onFim={atualizar} onVoltar={voltar} />;
     if (edicao.tipo === 'frente') {
       return <FormFrente financeiro={financeiro} frente={d.frentes.find((f) => f.id === edicao.id)} centro={d.centros.find((c) => c.id === edicao.centroId)!}
         onFim={() => { setRecarregar((n) => n + 1); onAlterou?.(); setEdicao({ tipo: 'centro', id: edicao.centroId }); }} onVoltar={() => setEdicao({ tipo: 'centro', id: edicao.centroId })} />;
@@ -76,7 +90,7 @@ export function FinanceiroTela({ financeiro, versao = 0, onAlterou, abaInicial =
   async function iniciais() {
     try {
       const r = await financeiro.criarCadastrosIniciais();
-      atualizar(`Criados: ${r.empresas} empresas, ${r.contas} contas, ${r.centros} centros de custo e ${r.tipos} tipos de despesa.`);
+      atualizar(`Criados: ${r.empresas} empresas, ${r.contas} contas, ${r.centros} centros de custo, ${r.tipos} tipos de despesa e ${r.encargos} encargos.`);
     } catch (e) { setMsg({ erro: (e as Error).message }); }
   }
 
@@ -84,14 +98,14 @@ export function FinanceiroTela({ financeiro, versao = 0, onAlterou, abaInicial =
     <View style={{ gap: 12 }}>
       <Chips prefixo="fin" valor={aba} onMudar={(a) => { setAba(a); setBusca(''); setMsg({}); }} opcoes={[
         { id: 'empresas', titulo: 'Empresas e contas' }, { id: 'centros', titulo: 'Centros de custo' },
-        { id: 'fornecedores', titulo: 'Fornecedores' }, { id: 'tipos', titulo: 'Tipos de despesa' },
+        { id: 'fornecedores', titulo: 'Fornecedores' }, { id: 'tipos', titulo: 'Tipos de despesa' }, { id: 'encargos', titulo: 'Encargos' },
         ...(pode && escolherPlanilha ? [{ id: 'importar' as const, titulo: 'Importar planilha' }] : []),
       ]} />
       {!pode && <Text style={estilos.subtitulo}>Consulta. Só o administrador do financeiro altera os cadastros.</Text>}
       {pode && d.empresas.length === 0 && (
         <Cartao>
           <Text style={estilos.titulo}>Começar</Text>
-          <Text style={estilos.subtitulo}>Cria ALN e Passos com as contas informadas (ALN: BB e Inter; Passos: BB, Itaú, Inter e Nubank), os centros Administração e Estoque/Galpão (um de cada, para as duas empresas) e a lista de tipos de despesa. Depois é só completar CNPJ, agência e conta.</Text>
+          <Text style={estilos.subtitulo}>Cria ALN e Passos com as contas informadas (ALN: BB e Inter; Passos: BB, Itaú, Inter e Nubank), os centros Administração e Estoque/Galpão (um de cada, para as duas empresas), a lista de tipos de despesa e os encargos (37,77% e 67,05%). Depois é só completar CNPJ, agência e conta.</Text>
           <Botao testID="iniciais" titulo="Criar cadastros iniciais" onPress={() => void iniciais()} />
         </Cartao>
       )}
@@ -186,6 +200,32 @@ export function FinanceiroTela({ financeiro, versao = 0, onAlterou, abaInicial =
             {!!f.chavePix && <Text style={estilos.subtitulo}>{descreverPix(f.chavePix)}</Text>}
           </Pressable>
         )} />
+    );
+  }
+
+  if (aba === 'encargos') {
+    const mes = mesAtual();
+    return (
+      <ScrollView contentContainerStyle={estilos.conteudo} keyboardShouldPersistTaps="handled">
+        {cabecalho}
+        <Text style={estilos.subtitulo}>Percentuais de encargos sociais sobre a folha, usados no rateio da folha. Uma mudança vale a partir do mês escolhido; os meses anteriores continuam com o percentual antigo.</Text>
+        {pode && <Botao testID="novo-encargo" titulo="+ Novo percentual de encargos" onPress={() => setEdicao({ tipo: 'encargo' })} />}
+        {d.encargos.map((e) => {
+          const atual = percentualNoMes(e.vigencias, mes);
+          return (
+            <Pressable key={e.id} testID={`encargo-${e.id}`} disabled={!pode} onPress={() => setEdicao({ tipo: 'encargo', id: e.id })} style={[estilos.card, !e.ativo && { opacity: 0.5 }]}>
+              <View style={estilos.linha}>
+                <Text style={[estilos.titulo, { flex: 1 }]}>{e.nome}</Text>
+                <Text testID={`pct-${e.id}`} style={[estilos.titulo, { color: cores.primaria }]}>{atual === undefined ? '—' : pct(atual)}</Text>
+              </View>
+              {!!e.descricao && <Text style={estilos.subtitulo}>{e.descricao}</Text>}
+              {e.vigencias.length > 1 && (
+                <Text style={estilos.subtitulo}>{`Histórico: ${e.vigencias.map((v) => `${pct(v.percentual)} desde ${v.desde === '2000-01' ? 'o início' : formatarMes(v.desde)}`).join(' · ')}`}</Text>
+              )}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
     );
   }
 
@@ -308,8 +348,9 @@ function FormConta({ financeiro, conta, empresa, onFim, onVoltar }: { financeiro
   );
 }
 
-function FormCentro({ financeiro, centro, empresas, frentes, onFrente, onFim, onVoltar }: {
-  financeiro: Financeiro; centro?: CentroCusto; empresas: Empresa[]; frentes: Local[]; onFrente: (id?: string) => void; onFim: () => void; onVoltar: () => void;
+function FormCentro({ financeiro, centro, empresas, frentes, onFrente, onCustoFixo, onFim, onVoltar }: {
+  financeiro: Financeiro; centro?: CentroCusto; empresas: Empresa[]; frentes: Local[]; onFrente: (id?: string) => void; onCustoFixo: (id?: string) => void;
+  onFim: () => void; onVoltar: () => void;
 }) {
   const pode = financeiro.podeEditar;
   const [nome, setNome] = useState(centro?.nome ?? '');
@@ -354,6 +395,91 @@ function FormCentro({ financeiro, centro, empresas, frentes, onFrente, onFim, on
           {pode && <Botao testID="nova-frente" titulo="+ Frente de serviço" secundario onPress={() => onFrente(undefined)} />}
         </Cartao>
       )}
+      {centro && (
+        <Cartao>
+          <Text style={estilos.titulo}>Custos fixos mensais</Text>
+          <Text style={estilos.subtitulo}>Lançados sozinhos no último dia de cada mês, enquanto estiverem valendo.</Text>
+          {!(centro.custosFixos ?? []).length && <Text style={estilos.subtitulo}>Nenhum custo fixo.</Text>}
+          {(centro.custosFixos ?? []).map((c) => (
+            <Pressable key={c.id} testID={`custo-fixo-${c.id}`} disabled={!pode} onPress={() => onCustoFixo(c.id)} style={{ paddingVertical: 6 }}>
+              <Text style={estilos.valor}>{`${c.descricao} · ${formatarMoeda(c.valor)}/mês`}</Text>
+              <Text style={estilos.subtitulo}>{`${c.tipo} · desde ${formatarMes(c.inicio)}${c.fim ? ` até ${formatarMes(c.fim)}` : ''}`}</Text>
+            </Pressable>
+          ))}
+          {pode && <Botao testID="novo-custo-fixo" titulo="+ Custo fixo" secundario onPress={() => onCustoFixo(undefined)} />}
+        </Cartao>
+      )}
+    </ScrollView>
+  );
+}
+
+function FormCustoFixo({ financeiro, centro, custo, tipos, onFim, onVoltar }: {
+  financeiro: Financeiro; centro: CentroCusto; custo?: CustoFixo; tipos: TipoDespesa[]; onFim: () => void; onVoltar: () => void;
+}) {
+  const [descricao, setDescricao] = useState(custo?.descricao ?? '');
+  const [tipo, setTipo] = useState(custo?.tipo ?? '');
+  const [valor, setValor] = useState(custo ? String(custo.valor).replace('.', ',') : '');
+  const [inicio, setInicio] = useState(formatarMes(custo?.inicio));
+  const [fim, setFim] = useState(formatarMes(custo?.fim));
+  const { erro, salvar } = useSalvar(async () => {
+    const v = lerNumero(valor);
+    await financeiro.salvarCustoFixo(centro.id, {
+      id: custo?.id, descricao, tipo, valor: v ?? 0, inicio: inicio.trim() ? lerMes(inicio) : '', ...(fim.trim() ? { fim: lerMes(fim) } : {}),
+    });
+  }, onFim);
+  const remover = useSalvar(() => financeiro.removerCustoFixo(centro.id, custo!.id), onFim);
+  return (
+    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={estilos.conteudo}>
+      <Cartao>
+        <Text style={estilos.titulo}>{`${custo ? 'Editar custo fixo' : 'Novo custo fixo'} · ${centro.nome}`}</Text>
+        <Campo testID="descricao" rotulo="Descrição" value={descricao} onChangeText={setDescricao} placeholder="Ex.: Despesa geral" />
+        <Seletor testID="tipo-custo" rotulo="Tipo de despesa" valor={tipos.find((t) => t.nome === tipo)?.id} onEscolher={(id) => setTipo(tipos.find((t) => t.id === id)!.nome)}
+          opcoes={tipos.map((t) => ({ id: t.id, titulo: t.nome }))} />
+        <Campo testID="valor" rotulo="Valor por mês (R$)" value={valor} onChangeText={setValor} keyboardType="decimal-pad" />
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Campo testID="inicio" rotulo="Desde (mm/aaaa)" value={inicio} onChangeText={setInicio} keyboardType="numbers-and-punctuation" style={{ flex: 1 }} placeholder="08/2026" />
+          <Campo testID="fim" rotulo="Até (opcional)" value={fim} onChangeText={setFim} keyboardType="numbers-and-punctuation" style={{ flex: 1 }} placeholder="mm/aaaa" />
+        </View>
+        <Rodape erro={erro ?? remover.erro} onSalvar={salvar} onVoltar={onVoltar} />
+        {custo && <Botao testID="remover-custo-fixo" titulo="Remover custo fixo" perigo onPress={remover.salvar} />}
+      </Cartao>
+    </ScrollView>
+  );
+}
+
+function FormEncargo({ financeiro, encargo, onFim, onVoltar }: { financeiro: Financeiro; encargo?: Encargo; onFim: () => void; onVoltar: () => void }) {
+  const [nome, setNome] = useState(encargo?.nome ?? '');
+  const [descricao, setDescricao] = useState(encargo?.descricao ?? '');
+  const [ativo, setAtivo] = useState(encargo?.ativo ?? true);
+  const [percentual, setPercentual] = useState('');
+  const proximo = (() => { const [a, m] = mesAtual().split('-').map(Number); return m === 12 ? `01/${a + 1}` : `${String(m + 1).padStart(2, '0')}/${a}`; })();
+  const [desde, setDesde] = useState(proximo);
+  const { erro, salvar } = useSalvar(async () => {
+    const p = lerNumero(percentual);
+    if (!encargo) {
+      await financeiro.salvarEncargo({ nome, descricao, ativo, percentual: p, desde: lerMes(desde) });
+      return;
+    }
+    await financeiro.salvarEncargo({ id: encargo.id, nome, descricao, ativo });
+    if (percentual.trim()) await financeiro.definirPercentual(encargo.id, lerMes(desde), p ?? -1);
+  }, onFim);
+  return (
+    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={estilos.conteudo}>
+      <Cartao>
+        <Text style={estilos.titulo}>{encargo ? 'Editar encargos' : 'Novo percentual de encargos'}</Text>
+        <Campo testID="nome" rotulo="Nome" value={nome} onChangeText={setNome} />
+        <Campo testID="descricao" rotulo="A quem se aplica" value={descricao} onChangeText={setDescricao} multiline />
+        {encargo && (
+          <Text style={estilos.subtitulo}>{`Vigências: ${encargo.vigencias.map((v) => `${pct(v.percentual)} desde ${v.desde === '2000-01' ? 'o início' : formatarMes(v.desde)}`).join(' · ')}`}</Text>
+        )}
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Campo testID="percentual" rotulo={encargo ? 'Novo percentual (%)' : 'Percentual (%)'} value={percentual} onChangeText={setPercentual} keyboardType="decimal-pad" style={{ flex: 1 }}
+            placeholder={encargo ? 'Em branco: não muda' : 'Ex.: 37,77'} />
+          <Campo testID="desde" rotulo="A partir de (mm/aaaa)" value={desde} onChangeText={setDesde} keyboardType="numbers-and-punctuation" style={{ flex: 1 }} />
+        </View>
+        <Ativo valor={ativo} onMudar={setAtivo} />
+        <Rodape erro={erro} onSalvar={salvar} onVoltar={onVoltar} />
+      </Cartao>
     </ScrollView>
   );
 }

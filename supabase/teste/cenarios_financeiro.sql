@@ -19,6 +19,7 @@ set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000ad', false);
 insert into public.empresas (id, dados) values ('aln', '{"id":"aln","apelido":"ALN","nome":"ALN","ativo":true}');
 insert into public.centros (id, dados) values ('rmg', '{"id":"rmg","nome":"RMG Água","empresaId":"aln","apelidos":[],"ativo":true}');
+insert into public.encargos (id, dados) values ('folha', '{"id":"folha","nome":"Encargos da folha","vigencias":[{"desde":"2000-01","percentual":37.77}],"ativo":true}');
 insert into public.fornecedores (id, dados) values ('aco', '{"id":"aco","nome":"Aço Potiguar","forma":"pix","apelidos":[],"ativo":true}');
 insert into public.locais (id, dados) values ('pureza', '{"id":"pureza","nome":"RMG Pureza","centroCusto":"RMG Água","centroId":"rmg","ativo":true}');
 
@@ -27,6 +28,12 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000f1
 do $$ begin
   assert (select count(*) from public.empresas) = 1, 'pagador lê empresas';
   assert (select count(*) from public.fornecedores) = 1, 'pagador lê fornecedores';
+  assert (select count(*) from public.encargos) = 1, 'pagador lê encargos';
+  begin
+    insert into public.encargos (id, dados) values ('x', '{}');
+    raise exception 'FALHA: pagador criou encargo';
+  exception when insufficient_privilege then null;
+  end;
   assert (select count(*) from public.locais) >= 1, 'pagador lê frentes';
   assert (select count(*) from public.itens) = 0, 'FALHA: pagador leu itens do estoque';
   assert (select count(*) from public.movimentos) = 0, 'FALHA: pagador leu movimentos do estoque';
@@ -56,6 +63,7 @@ do $$ begin
   assert (select count(*) from public.locais) >= 1, 'almoxarife lê frentes';
   assert (select count(*) from public.empresas) = 0, 'FALHA: almoxarife leu empresas';
   assert (select count(*) from public.fornecedores) = 0, 'FALHA: almoxarife leu fornecedores';
+  assert (select count(*) from public.encargos) = 0, 'FALHA: almoxarife leu encargos';
   begin
     insert into public.centros (id, dados) values ('x', '{}');
     raise exception 'FALHA: almoxarife criou centro de custo';

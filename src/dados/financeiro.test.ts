@@ -1,3 +1,4 @@
+import { percentualNoMes } from '../domain/meses';
 import { CLINTON_FIN, estoqueComCadastros, financeiroDeTeste, MARILIA, PAGADORA } from '../testes/fabricas';
 import { Financeiro } from './financeiro';
 
@@ -97,13 +98,43 @@ describe('Financeiro — cadastros', () => {
 
   it('cadastros iniciais: ALN e Passos, contas, Administração e Galpão (um de cada), tipos; repetir não duplica', async () => {
     const { financeiro, armazenamento } = financeiroDeTeste();
-    expect(await financeiro.criarCadastrosIniciais()).toEqual({ empresas: 2, contas: 6, centros: 2, tipos: 19 });
+    expect(await financeiro.criarCadastrosIniciais()).toEqual({ empresas: 2, contas: 6, centros: 2, tipos: 20, encargos: 2 });
     expect((await financeiro.contas()).map((c) => c.apelido)).toEqual(['BB ALN', 'BB Passos', 'Inter ALN', 'Inter Passos', 'Itaú Passos', 'Nubank Passos']);
     expect((await financeiro.centros()).map((c) => `${c.nome}:${c.especial}`)).toEqual([
       'Administração:administracao', 'Estoque/Galpão:galpao',
     ]);
     expect((await financeiro.centros()).every((c) => c.empresaId === undefined)).toBe(true);
-    expect(await financeiro.criarCadastrosIniciais()).toEqual({ empresas: 0, contas: 0, centros: 0, tipos: 0 });
-    expect((await armazenamento.fila.listar()).length).toBe(2 + 6 + 2 + 19);
+    expect(await financeiro.criarCadastrosIniciais()).toEqual({ empresas: 0, contas: 0, centros: 0, tipos: 0, encargos: 0 });
+    expect((await armazenamento.fila.listar()).length).toBe(2 + 6 + 2 + 20 + 2);
+  });
+
+  it('custos fixos mensais no centro: RMG Água R$ 20.000 desde 08/2026, tipo Despesa geral', async () => {
+    const { financeiro } = financeiroDeTeste();
+    await financeiro.criarCadastrosIniciais();
+    const rmg = await financeiro.salvarCentro({ nome: 'RMG ÁGUA', ativo: true });
+    await expect(financeiro.salvarCustoFixo(rmg.id, { descricao: 'Despesa geral', tipo: 'Nada', valor: 1, inicio: '2026-08' })).rejects.toThrow('Tipo de despesa "Nada" não cadastrado');
+    await expect(financeiro.salvarCustoFixo(rmg.id, { descricao: 'Despesa geral', tipo: 'Despesa geral', valor: 20000, inicio: '08/2026' })).rejects.toThrow('Informe o mês de início');
+    await expect(financeiro.salvarCustoFixo(rmg.id, { descricao: 'X', tipo: 'despesa geral', valor: 1, inicio: '2026-08', fim: '2026-07' })).rejects.toThrow('O fim não pode ser antes do início');
+    const cf = await financeiro.salvarCustoFixo(rmg.id, { descricao: 'Despesa geral', tipo: 'DESPESA GERAL', valor: 20000, inicio: '2026-08' });
+    expect(cf).toMatchObject({ descricao: 'Despesa geral', tipo: 'Despesa geral', valor: 20000, inicio: '2026-08' });
+    await financeiro.salvarCustoFixo(rmg.id, { ...cf, valor: 21000 });
+    expect((await financeiro.centros()).find((c) => c.id === rmg.id)?.custosFixos).toEqual([{ ...cf, valor: 21000 }]);
+    await financeiro.removerCustoFixo(rmg.id, cf.id);
+    expect((await financeiro.centros()).find((c) => c.id === rmg.id)?.custosFixos).toEqual([]);
+  });
+
+  it('encargos: 37,77% e 67,05% iniciais; mudança vale a partir do mês escolhido e guarda o histórico', async () => {
+    const { financeiro } = financeiroDeTeste();
+    await financeiro.criarCadastrosIniciais();
+    const [folha, especiais] = await financeiro.encargos();
+    expect([folha.nome, folha.vigencias]).toEqual(['Encargos da folha', [{ desde: '2000-01', percentual: 37.77 }]]);
+    expect(especiais.vigencias).toEqual([{ desde: '2000-01', percentual: 67.05 }]);
+    await expect(financeiro.definirPercentual(folha.id, '2027-01', 300)).rejects.toThrow('Percentual inválido');
+    const novo = await financeiro.definirPercentual(folha.id, '2027-01', 35);
+    expect(novo.vigencias).toEqual([{ desde: '2000-01', percentual: 37.77 }, { desde: '2027-01', percentual: 35 }]);
+    expect(percentualNoMes(novo.vigencias, '2026-12')).toBe(37.77);
+    expect(percentualNoMes(novo.vigencias, '2027-03')).toBe(35);
+    const { financeiro: pag } = financeiroDeTeste(PAGADORA);
+    await expect(pag.definirPercentual(folha.id, '2027-01', 30)).rejects.toThrow('Sem permissão');
   });
 });

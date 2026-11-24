@@ -1,6 +1,7 @@
 -- Financeiro, etapa 1 (rode uma vez no SQL Editor do Supabase "Estoque", depois do 005). É seguro rodar de novo.
 -- Cria o perfil do financeiro (independente do papel no galpão) e os cadastros: empresas, contas bancárias,
--- centros de custo, fornecedores e tipos de despesa. As frentes de serviço continuam na tabela "locais".
+-- centros de custo (com os custos fixos mensais), fornecedores, tipos de despesa e percentuais de encargos.
+-- As frentes de serviço continuam na tabela "locais". Se você já rodou uma versão anterior, rode de novo (cria o que faltar).
 
 -- 1. Perfil do financeiro: admin (cadastra, aprova, vê tudo), pagador (paga e opera a folha), solicitante (pede).
 alter table public.perfis add column if not exists financeiro text;
@@ -27,7 +28,7 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['empresas', 'contas', 'centros', 'fornecedores', 'tipos_despesa'] loop
+  foreach t in array array['empresas', 'contas', 'centros', 'fornecedores', 'tipos_despesa', 'encargos'] loop
     execute format($f$
       create table if not exists public.%1$I (
         id text primary key,

@@ -18,6 +18,9 @@ function linhasResumo(r: ResumoCadastros): string[] {
     r.frentesLigadas && `${r.frentesLigadas} frente(s) do estoque ligada(s) a um centro de custo`,
     r.fornecedores && `${r.fornecedores} fornecedor(es)`,
     r.tipos && `${r.tipos} tipo(s) de despesa`,
+    r.fixos && `${r.fixos} custo(s) fixo(s) mensal(is)`,
+    r.encargos && `${r.encargos} percentual(is) de encargos`,
+    r.encargosAlterados && `${r.encargosAlterados} percentual(is) de encargos alterado(s) a partir do mês informado`,
   ].filter((x): x is string => !!x);
 }
 

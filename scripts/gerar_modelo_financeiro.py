@@ -29,10 +29,13 @@ texto = [
     ('   As frentes já cadastradas no estoque com um contrato igual ao nome (ou a um outro nome) de um centro são ligadas sozinhas.', ''),
     ('5. Fornecedores — CPF ou CNPJ, chave Pix e forma de pagamento (Pix, Boleto ou Fatura semanal). Dia de fechamento só para fatura semanal.', ''),
     ('6. Tipos de despesa — a lista já vem pronta; acrescente ou complete os outros nomes.', ''),
+    ('7. Custos fixos — valor que entra todo mês num centro de custo (lançado no último dia do mês). "Até" em branco = sem fim.', ''),
+    ('8. Encargos — percentuais sobre a folha. "A partir de" em branco = vale para todo o histórico. Para mudar depois, use o app (Financeiro → Encargos) ou uma linha com o novo percentual e o mês.', ''),
     ('', ''),
     ('CONFIRA ANTES DE IMPORTAR', 'secao'),
     ('• Centros e frentes vieram da lista de presença de outubro (agrupamento da tabela de contratos) e dos caixas. Corrija o que estiver diferente.', ''),
     ('• CODERN está como Parado. ADM da lista de presença é a frente do centro Administração.', ''),
+    ('• Custos fixos: RMG ÁGUA R$ 20.000 desde 08/2026 e PARNAMIRIM R$ 10.000 (confira o mês de início de Parnamirim).', ''),
     ('• CNPJ, conta e chave Pix ficam como texto: digite só os números ou com pontuação, tanto faz.', ''),
 ]
 for i, (t, estilo) in enumerate(texto, start=1):
@@ -110,9 +113,24 @@ TIPOS = [
     ('Material', ''), ('Material estoque', ''), ('Serviço', ''), ('Terceirizado', ''), ('Salário', 'Folha'), ('Encargos', 'Encargos da folha'),
     ('Administrativo', 'ADM'), ('Combustível', ''), ('Alimentação', ''), ('Vale alimentação', ''), ('Vale transporte', ''), ('Alojamento', ''),
     ('Locação de equipamento', ''), ('Manutenção de veículo', 'Manutenção veículo'), ('Manutenção de equipamento', 'Manutenção equipamento'),
-    ('Ferramenta', ''), ('Transporte', ''), ('Imposto', ''), ('Outros', ''),
+    ('Ferramenta', ''), ('Transporte', ''), ('Imposto', ''), ('Despesa geral', ''), ('Outros', ''),
 ]
 aba('Tipos de despesa', [('Tipo de despesa', 28), ('Outros nomes', 40)], [(n, a or None) for n, a in TIPOS])
+
+fx = aba('Custos fixos', [('Centro de custo', 22), ('Descrição', 24), ('Tipo de despesa', 20), ('Valor mensal (R$)', 16), ('Desde (mm/aaaa)', 15), ('Até (mm/aaaa)', 14)], [
+    ('RMG ÁGUA', 'Despesa geral', 'Despesa geral', 20000, '08/2026', None),
+    ('PARNAMIRIM', 'Despesa geral', 'Despesa geral', 10000, '08/2026', None),
+], texto_cols='EF')
+fx['E3'].fill = AZUL
+for r in range(2, 501):
+    fx[f'D{r}'].number_format = '#,##0.00'
+lista(fx, 'A', "='Centros de custo'!$A$2:$A$200")
+lista(fx, 'C', "='Tipos de despesa'!$A$2:$A$200")
+
+ec = aba('Encargos', [('Nome', 24), ('Percentual (%)', 15), ('A partir de (mm/aaaa)', 20), ('A quem se aplica', 70)], [
+    ('Encargos da folha', 37.77, None, 'Percentual geral da planilha de presença (serventes, profissionais, produção e salários fixos)'),
+    ('Encargos especiais', 67.05, None, 'Percentual maior usado em caso individual na planilha de presença'),
+], texto_cols='C')
 
 wb.save(f'{RAIZ}/modelos/Cadastros_Financeiro.xlsx')
 print(f'{len(CENTROS)} centros, {len(FRENTES)} frentes, {len(TIPOS)} tipos')
