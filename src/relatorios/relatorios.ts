@@ -1,8 +1,8 @@
 import { formatarDataBR, type Periodo } from '../domain/datas';
 import { gastosPorLocal, ordenarMovimentos, type Posicao } from '../domain/estoque';
 import { formatarMoeda, formatarNumero } from '../domain/formato';
-import { atrasado, diasDeAtraso, emprestimosAbertos } from '../domain/ferramentas';
-import type { Emprestimo, Ferramenta, Funcionario, Item, Local, Movimento, TipoMovimento } from '../domain/tipos';
+import { divergenciasDeCobranca, emPrazo, posicoesDoBem, situacaoLocacao } from '../domain/bens';
+import type { Bem, Funcionario, Item, Local, Movimento, MovimentoBem, TipoMovimento } from '../domain/tipos';
 
 export type TipoColuna = 'texto' | 'numero' | 'moeda';
 export interface Coluna { titulo: string; tipo: TipoColuna }
@@ -124,30 +124,64 @@ export function relatorioHistorico(
   };
 }
 
-/** Ferramentas que estão fora do galpão, com quem, desde quando e se estão atrasadas. */
-export function relatorioFerramentasFora(
-  ferramentas: Ferramenta[], emprestimos: Emprestimo[], funcionarios: Funcionario[], locais: Local[], hoje: string,
-): Relatorio {
-  const ferr = new Map(ferramentas.map((f) => [f.id, f]));
+const nomeBem = (b: Bem) => `${b.nome}${b.codigo ? ` ${b.codigo}` : ''}`;
+const dias = (n: number) => `${n} ${n === 1 ? 'dia' : 'dias'}`;
+
+/** Onde está cada ferramenta e equipamento locado: uma linha por bem e posse. */
+export function relatorioBens(bens: Bem[], movs: MovimentoBem[], funcionarios: Funcionario[], locais: Local[], hoje: string): Relatorio {
   const func = new Map(funcionarios.map((f) => [f.id, f.nome]));
   const local = new Map(locais.map((l) => [l.id, l.nome]));
-  const abertos = emprestimosAbertos(emprestimos).sort((a, b) => a.prevista.localeCompare(b.prevista) || a.saida.localeCompare(b.saida));
-  const linhas: Linha[] = abertos.map((e) => {
-    const f = ferr.get(e.ferramentaId);
-    const dias = diasDeAtraso(e, hoje);
-    return {
-      celulas: [
-        f ? `${f.nome}${f.codigo ? ` ${f.codigo}` : ''}` : 'Ferramenta removida', func.get(e.funcionarioId) ?? '', local.get(e.localId ?? '') ?? '',
-        formatarDataBR(e.saida), formatarDataBR(e.prevista), atrasado(e, hoje) ? `Atrasada ${dias} ${dias === 1 ? 'dia' : 'dias'}` : 'No prazo',
-      ],
-    };
-  });
+  const linhas: Linha[] = [];
+  for (const b of bens.filter((x) => x.ativo)) {
+    const prazo = b.controle === 'unidade' ? emPrazo(movs, b.id, hoje) : undefined;
+    for (const p of posicoesDoBem(movs, b.id)) {
+      const campo = p.posse.tipo === 'campo' ? p.posse : undefined;
+      linhas.push({
+        celulas: [
+          nomeBem(b), b.tipo === 'locado' ? 'Locado' : 'Ferramenta', campo ? func.get(campo.funcionarioId) ?? '' : 'Galpão', campo ? local.get(campo.localId) ?? '' : '', p.quantidade,
+          campo && prazo ? (prazo.atraso > 0 ? `Atrasada ${dias(prazo.atraso)}` : `Devolver até ${formatarDataBR(prazo.prevista)}`) : '',
+        ],
+      });
+    }
+  }
+  linhas.sort((x, y) => String(x.celulas[0]).localeCompare(String(y.celulas[0]), 'pt-BR', { numeric: true }));
   return {
-    titulo: 'Ferramentas fora do galpão', subtitulo: `Posição em ${formatarDataBR(hoje)} — ${abertos.length} ${abertos.length === 1 ? 'ferramenta' : 'ferramentas'}`,
-    arquivo: `Ferramentas_fora_${hoje}`,
+    titulo: 'Ferramentas e equipamentos — onde está cada um', subtitulo: `Posição em ${formatarDataBR(hoje)}`, arquivo: `Equipamentos_${hoje}`,
     colunas: [
-      { titulo: 'Ferramenta', tipo: 'texto' }, { titulo: 'Com', tipo: 'texto' }, { titulo: 'Frente de serviço', tipo: 'texto' },
-      { titulo: 'Saída', tipo: 'texto' }, { titulo: 'Devolução prevista', tipo: 'texto' }, { titulo: 'Situação', tipo: 'texto' },
+      { titulo: 'Item', tipo: 'texto' }, { titulo: 'Tipo', tipo: 'texto' }, { titulo: 'Com', tipo: 'texto' },
+      { titulo: 'Frente de serviço', tipo: 'texto' }, { titulo: 'Qtd.', tipo: 'numero' }, { titulo: 'Prazo', tipo: 'texto' },
+    ],
+    linhas,
+  };
+}
+
+/** Equipamentos locados: contrato, prazo, onde estão e se há peças em obra diferente da cobrada pela locadora. */
+export function relatorioLocados(bens: Bem[], movs: MovimentoBem[], locais: Local[], hoje: string): Relatorio {
+  const local = new Map(locais.map((l) => [l.id, l.nome]));
+  const linhas: Linha[] = [];
+  for (const b of bens.filter((x) => x.ativo && x.tipo === 'locado')) {
+    const pos = posicoesDoBem(movs, b.id);
+    const total = pos.reduce((t, p) => t + p.quantidade, 0);
+    const l = b.locacao;
+    const prazo = situacaoLocacao(b, total, hoje);
+    const fora = divergenciasDeCobranca(b, pos);
+    linhas.push({
+      celulas: [
+        nomeBem(b), l?.locadora ?? '', l?.contrato ?? '',
+        l?.valor !== undefined ? `${formatarMoeda(l.valor)}/${l.periodo === 'dia' ? 'dia' : 'mês'}` : '',
+        l?.inicio ? formatarDataBR(l.inicio) : '', l?.prevista ? formatarDataBR(l.prevista) : '', local.get(l?.localCobrancaId ?? '') ?? '', total,
+        !prazo ? '' : prazo.situacao === 'vencida' ? `Vencida há ${dias(-prazo.dias)}` : prazo.situacao === 'vence' ? (prazo.dias === 0 ? 'Vence hoje' : `Vence em ${dias(prazo.dias)}`) : 'No prazo',
+        fora.map((d) => `${d.quantidade} em ${local.get(d.localId) ?? '?'}`).join('; '),
+      ],
+    });
+  }
+  linhas.sort((x, y) => String(x.celulas[0]).localeCompare(String(y.celulas[0]), 'pt-BR', { numeric: true }));
+  return {
+    titulo: 'Equipamentos locados', subtitulo: `Posição em ${formatarDataBR(hoje)}`, arquivo: `Locados_${hoje}`,
+    colunas: [
+      { titulo: 'Equipamento', tipo: 'texto' }, { titulo: 'Locadora', tipo: 'texto' }, { titulo: 'Contrato', tipo: 'texto' }, { titulo: 'Valor por peça', tipo: 'texto' },
+      { titulo: 'Início', tipo: 'texto' }, { titulo: 'Fim previsto', tipo: 'texto' }, { titulo: 'Obra cobrada', tipo: 'texto' }, { titulo: 'Qtd.', tipo: 'numero' },
+      { titulo: 'Prazo', tipo: 'texto' }, { titulo: 'Em outra obra', tipo: 'texto' },
     ],
     linhas,
   };

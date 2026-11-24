@@ -92,21 +92,22 @@ describe('Sincronizador', () => {
     expect(r1).toBe(r2);
   });
 
-  it('ferramentas, empréstimos e entregas de EPI sincronizam entre aparelhos', async () => {
-    const { a, b, tinta, joao } = await preparar();
+  it('bens, movimentações de posse e entregas de EPI sincronizam entre aparelhos', async () => {
+    const { a, b, tinta, joao, local } = await preparar();
     await a.estoque.lancar({ tipo: 'entrada', data: '2026-11-10', linhas: [{ itemId: tinta.id, quantidade: 10, custoUnitario: 50 }] });
-    const f = await a.estoque.salvarFerramenta({ nome: 'Furadeira', codigo: '01', ativo: true });
-    const e = await a.estoque.emprestar({ ferramentaId: f.id, funcionarioId: joao.id, saida: '2026-11-10', prevista: '2026-11-17' });
+    const escora = await a.estoque.cadastrarBem({ nome: 'Escora', tipo: 'locado', controle: 'quantidade', ativo: true, locacao: { locadora: 'Agaé' } },
+      { posse: { tipo: 'galpao' }, quantidade: 100, data: '2026-11-10' });
+    await a.estoque.movimentarBem({ bemId: escora.id, data: '2026-11-11', quantidade: 40, origem: { tipo: 'galpao' }, destino: { tipo: 'campo', funcionarioId: joao.id, localId: local.id } });
     await a.estoque.lancar({ tipo: 'epi', data: '2026-11-10', funcionarioId: joao.id, linhas: [{ itemId: tinta.id, quantidade: 1, ca: '77' }] });
     await a.sync.sincronizar();
     await b.sync.sincronizar();
-    expect((await b.estoque.emprestimos()).map((x) => x.id)).toEqual([e.id]);
-    expect((await b.estoque.ferramentas())[0].nome).toBe('FURADEIRA');
+    expect((await b.estoque.movimentosBens())).toHaveLength(2);
+    expect((await b.estoque.bens())[0].nome).toBe('ESCORA');
     expect((await b.estoque.posicao()).itens[tinta.id].quantidade).toBe(9);
-    // devolução registrada no outro aparelho volta para o primeiro
-    await b.estoque.devolverFerramenta(e.id, { devolvidoEm: '2026-11-12' });
+    // movimentação feita no outro aparelho volta para o primeiro
+    await b.estoque.movimentarBem({ bemId: escora.id, data: '2026-11-12', quantidade: 10, origem: { tipo: 'galpao' }, destino: { tipo: 'externo' }, motivo: 'devolucao-locadora' });
     await b.sync.sincronizar();
     await a.sync.sincronizar();
-    expect((await a.estoque.emprestimos())[0].devolvidoEm).toBe('2026-11-12');
+    expect((await a.estoque.movimentosBens())).toHaveLength(3);
   });
 });

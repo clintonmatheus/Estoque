@@ -49,7 +49,8 @@ describe('Raiz', () => {
     await estoque.lancar({ tipo: 'entrada', data: '2026-11-01', linhas: [{ itemId: tinta.id, quantidade: 5, custoUnitario: 10 }] });
     const [s] = await estoque.lancar({ tipo: 'saida', data: '2026-11-02', localId: riachuelo.id, funcionarioId: joao.id, linhas: [{ itemId: tinta.id, quantidade: 2 }] });
     await render(<Raiz {...base} usuario={estoque.usuario} estoque={estoque} />);
-    await fireEvent.press(screen.getByTestId('aba-historico'));
+    await fireEvent.press(screen.getByTestId('aba-mais'));
+    await fireEvent.press(screen.getByTestId('abrir-historico'));
     await fireEvent.press(await screen.findByTestId(`grupo-${s.grupo}`));
     expect(screen.getByText('Destino: Riachuelo')).toBeTruthy();
     expect(screen.getByText('Retirou: João')).toBeTruthy();
@@ -63,7 +64,8 @@ describe('Raiz', () => {
   it('relatórios geram PDF e Excel', async () => {
     const { estoque } = await estoqueComCadastros();
     await render(<Raiz {...base} usuario={estoque.usuario} estoque={estoque} />);
-    await fireEvent.press(screen.getByTestId('aba-relatorios'));
+    await fireEvent.press(screen.getByTestId('aba-mais'));
+    await fireEvent.press(screen.getByTestId('abrir-relatorios'));
     await fireEvent.press(screen.getByTestId('saldo-pdf'));
     await waitFor(() => expect(saida.pdf).toHaveBeenCalled());
     expect((saida.pdf.mock.calls[0] as unknown[])[0]).toContain('Saldo do estoque');

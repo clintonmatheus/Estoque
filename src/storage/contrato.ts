@@ -1,6 +1,6 @@
-import type { Anexo, Emprestimo, Ferramenta, Funcionario, Item, Local, Movimento } from '../domain/tipos';
+import type { Anexo, Bem, Funcionario, Item, Local, Movimento, MovimentoBem } from '../domain/tipos';
 
-export const TABELAS = ['itens', 'locais', 'funcionarios', 'movimentos', 'anexos', 'ferramentas', 'emprestimos'] as const;
+export const TABELAS = ['itens', 'locais', 'funcionarios', 'movimentos', 'anexos', 'bens', 'movimentos_bens'] as const;
 export type Tabela = (typeof TABELAS)[number];
 
 export interface Documentos {
@@ -9,8 +9,8 @@ export interface Documentos {
   funcionarios: Funcionario;
   movimentos: Movimento;
   anexos: Anexo;
-  ferramentas: Ferramenta;
-  emprestimos: Emprestimo;
+  bens: Bem;
+  movimentos_bens: MovimentoBem;
 }
 
 /** Coleção de documentos com `id` (todos guardados por completo). */

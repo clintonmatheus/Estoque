@@ -3,7 +3,7 @@ import { ScrollView, Text, View } from 'react-native';
 import type { Estoque } from '../dados/estoque';
 import { analisarDataBR, formatarDataBR, horaLocal, periodoDoMes, type Periodo } from '../domain/datas';
 import type { Funcionario, Item } from '../domain/tipos';
-import { relatorioEpi, relatorioFerramentasFora, relatorioGastos, relatorioHistorico, relatorioHtml, relatorioSaldo, type Relatorio } from '../relatorios/relatorios';
+import { relatorioEpi, relatorioBens, relatorioLocados, relatorioGastos, relatorioHistorico, relatorioHtml, relatorioSaldo, type Relatorio } from '../relatorios/relatorios';
 import { Botao, Campo, Cartao, Mensagem, Seletor } from './componentes';
 import { estilos } from './estilos';
 
@@ -15,7 +15,7 @@ export interface SaidaRelatorio {
 interface Props { estoque: Estoque; hoje: string; agora: () => string; saida: SaidaRelatorio; versao?: number }
 
 type Formato = 'pdf' | 'xlsx';
-type Qual = 'saldo' | 'gastos' | 'historico' | 'ferramentas' | 'epi';
+type Qual = 'saldo' | 'gastos' | 'historico' | 'equipamentos' | 'locados' | 'epi';
 
 export function RelatoriosTela({ estoque, hoje, agora, saida, versao = 0 }: Props) {
   const mes = periodoDoMes(hoje);
@@ -48,7 +48,8 @@ export function RelatoriosTela({ estoque, hoje, agora, saida, versao = 0 }: Prop
       ]);
       let r: Relatorio;
       if (qual === 'saldo') r = relatorioSaldo(todos, pos, hoje);
-      else if (qual === 'ferramentas') r = relatorioFerramentasFora(await estoque.ferramentas(true), await estoque.emprestimos(), funcs, locais, hoje);
+      else if (qual === 'equipamentos') r = relatorioBens(await estoque.bens(), await estoque.movimentosBens(), funcs, locais, hoje);
+      else if (qual === 'locados') r = relatorioLocados(await estoque.bens(), await estoque.movimentosBens(), locais, hoje);
       else if (qual === 'epi') r = relatorioEpi(movs, todos, funcs, periodo(deE, ateE), funcEpi);
       else if (qual === 'gastos') r = relatorioGastos(movs, todos, locais, pos, periodo(deG, ateG));
       else {
@@ -100,10 +101,15 @@ export function RelatoriosTela({ estoque, hoje, agora, saida, versao = 0 }: Prop
         </View>
         {botoes('historico')}
       </Cartao>
-      <Text style={estilos.secao}>Ferramentas fora do galpão</Text>
+      <Text style={estilos.secao}>Ferramentas e equipamentos</Text>
       <Cartao>
-        <Text style={estilos.subtitulo}>Quem está com cada ferramenta, desde quando e quais estão atrasadas.</Text>
-        {botoes('ferramentas')}
+        <Text style={estilos.subtitulo}>Onde está cada ferramenta e equipamento locado, com quem e em qual obra, e as devoluções atrasadas.</Text>
+        {botoes('equipamentos')}
+      </Cartao>
+      <Text style={estilos.secao}>Equipamentos locados</Text>
+      <Cartao>
+        <Text style={estilos.subtitulo}>Contrato, valor, prazo da locação e peças em obra diferente da cobrada pela locadora.</Text>
+        {botoes('locados')}
       </Cartao>
       <Text style={estilos.secao}>Entrega de EPI</Text>
       <Cartao>

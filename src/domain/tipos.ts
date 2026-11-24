@@ -85,36 +85,59 @@ export interface Movimento {
   cancelado?: Autoria & { motivo: string };
 }
 
-/** Ferramenta individual (ex.: "Furadeira 03"), emprestada a funcionários. */
-export interface Ferramenta {
+/** Onde um bem (ferramenta ou equipamento locado) está. */
+export type Posse =
+  | { tipo: 'externo' }
+  | { tipo: 'galpao' }
+  | { tipo: 'campo'; funcionarioId: string; localId: string };
+
+export type MotivoSaidaBem = 'devolucao-locadora' | 'perda' | 'baixa';
+
+/** Dados do contrato de locação de um equipamento locado. */
+export interface Locacao {
+  locadora: string;
+  contrato?: string;
+  /** Valor por peça no período. */
+  valor?: number;
+  periodo?: 'dia' | 'mes';
+  inicio?: string;
+  /** Data prevista para devolver o equipamento à locadora. */
+  prevista?: string;
+  /** Frente de serviço em que a locadora cobra este equipamento. */
+  localCobrancaId?: string;
+}
+
+/**
+ * Ferramenta própria ou equipamento locado (andaime, escora, sapata, piso...).
+ * controle 'unidade': cada exemplar é um cadastro (Furadeira 03). 'quantidade': conta peças (120 escoras).
+ */
+export interface Bem {
   id: string;
   nome: string;
-  /** Número/etiqueta da unidade (ex.: "03"). */
   codigo?: string;
+  tipo: 'ferramenta' | 'locado';
+  controle: 'unidade' | 'quantidade';
   ativo: boolean;
+  locacao?: Locacao;
+  observacao?: string;
   criado: Autoria;
   alterado?: Autoria;
 }
 
-/** Saída de uma ferramenta com um funcionário, com data prevista de devolução. */
-export interface Emprestimo {
+/** Mudança de posse de um bem: levantamento/chegada (origem externa), transferência ou saída (devolução, perda). */
+export interface MovimentoBem {
   id: string;
-  ferramentaId: string;
-  funcionarioId: string;
-  /** Frente de serviço onde será usada (opcional). */
-  localId?: string;
-  /** Dia em que saiu do galpão. */
-  saida: string;
-  /** Dia previsto para a devolução. */
-  prevista: string;
-  /** Dia em que voltou (vazio enquanto está fora). */
-  devolvidoEm?: string;
+  bemId: string;
+  data: string;
+  quantidade: number;
+  origem: Posse;
+  destino: Posse;
+  /** Obrigatório quando o destino é externo. */
+  motivo?: MotivoSaidaBem;
+  /** Dia previsto para a ferramenta voltar (unidades que vão para o campo). */
+  prevista?: string;
   observacao?: string;
-  /** Estado em que voltou (ex.: "cabo quebrado"). */
-  observacaoDevolucao?: string;
   criado: Autoria;
-  /** Quem registrou a devolução. */
-  devolvido?: Autoria;
   alterado?: Autoria;
   cancelado?: Autoria & { motivo: string };
 }
@@ -129,3 +152,4 @@ export interface Anexo {
   criado: Autoria;
   excluido?: boolean;
 }
+

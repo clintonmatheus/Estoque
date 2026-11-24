@@ -1,18 +1,10 @@
-import type { Emprestimo, Movimento } from './tipos';
+import type { Movimento } from './tipos';
 
 const DIA_MS = 86_400_000;
 const dia = (d: string) => Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10)));
 
 /** Dias entre duas datas AAAA-MM-DD (positivo se `ate` é depois de `de`). */
 export const diasEntre = (de: string, ate: string) => Math.round((dia(ate) - dia(de)) / DIA_MS);
-
-/** Ferramenta que está fora do galpão: não devolvida e não cancelada. */
-export const emprestimoAberto = (e: Emprestimo) => !e.devolvidoEm && !e.cancelado;
-export const emprestimosAbertos = (es: Emprestimo[]) => es.filter(emprestimoAberto);
-
-/** Atrasado só a partir do dia seguinte à data prevista. */
-export const atrasado = (e: Emprestimo, hoje: string) => emprestimoAberto(e) && hoje > e.prevista;
-export const diasDeAtraso = (e: Emprestimo, hoje: string) => (atrasado(e, hoje) ? diasEntre(e.prevista, hoje) : 0);
 
 export interface EpiParaTrocar {
   movimento: Movimento;

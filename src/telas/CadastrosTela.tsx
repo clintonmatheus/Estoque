@@ -3,11 +3,11 @@ import { FlatList, Pressable, ScrollView, Switch, Text, TextInput, View } from '
 import type { Estoque } from '../dados/estoque';
 import { CATEGORIAS, categoriaDoItem } from '../domain/categorias';
 import { formatarMoeda, formatarNumero, lerNumero } from '../domain/formato';
-import type { Ferramenta, Funcionario, Item, Local } from '../domain/tipos';
+import type { Funcionario, Item, Local } from '../domain/tipos';
 import { Botao, Campo, Cartao, Chips, filtrar, Mensagem } from './componentes';
 import { estilos } from './estilos';
 
-type Aba = 'itens' | 'locais' | 'funcionarios' | 'ferramentas';
+type Aba = 'itens' | 'locais' | 'funcionarios';
 const UNIDADES = ['un', 'pç', 'lata', 'balde', 'galão', 'kg', 'm', 'm²', 'rolo', 'saco', 'cx'];
 
 interface Props { estoque: Estoque; versao?: number; onAlterou?: () => void }
@@ -17,14 +17,13 @@ export function CadastrosTela({ estoque, versao = 0, onAlterou }: Props) {
   const [itens, setItens] = useState<Item[]>([]);
   const [locais, setLocais] = useState<Local[]>([]);
   const [funcs, setFuncs] = useState<Funcionario[]>([]);
-  const [ferrs, setFerrs] = useState<Ferramenta[]>([]);
   const [editando, setEditando] = useState<string | 'novo'>();
   const [busca, setBusca] = useState('');
   const [recarregar, setRecarregar] = useState(0);
   const [msg, setMsg] = useState<string>();
 
   useEffect(() => {
-    void Promise.all([estoque.itens(true), estoque.locais(true), estoque.funcionarios(true), estoque.ferramentas(true)]).then(([i, l, f, fe]) => { setItens(i); setLocais(l); setFuncs(f); setFerrs(fe); });
+    void Promise.all([estoque.itens(true), estoque.locais(true), estoque.funcionarios(true)]).then(([i, l, f]) => { setItens(i); setLocais(l); setFuncs(f); });
   }, [estoque, versao, recarregar]);
 
   const salvo = () => { setEditando(undefined); setRecarregar((n) => n + 1); onAlterou?.(); };
@@ -32,7 +31,6 @@ export function CadastrosTela({ estoque, versao = 0, onAlterou }: Props) {
   if (editando) {
     if (aba === 'itens') return <FormItem estoque={estoque} item={itens.find((i) => i.id === editando)} onFim={salvo} onVoltar={() => setEditando(undefined)} />;
     if (aba === 'locais') return <FormLocal estoque={estoque} local={locais.find((l) => l.id === editando)} centros={[...new Set(locais.map((l) => l.centroCusto))]} onFim={salvo} onVoltar={() => setEditando(undefined)} />;
-    if (aba === 'ferramentas') return <FormFerramenta estoque={estoque} ferramenta={ferrs.find((f) => f.id === editando)} onFim={salvo} onVoltar={() => setEditando(undefined)} />;
     return <FormFuncionario estoque={estoque} funcionario={funcs.find((f) => f.id === editando)} onFim={salvo} onVoltar={() => setEditando(undefined)} />;
   }
 
@@ -42,9 +40,7 @@ export function CadastrosTela({ estoque, versao = 0, onAlterou }: Props) {
       subtitulo: `${categoriaDoItem(i)} · ${i.unidade}${i.embalagem ? ` · ${i.embalagem.nome} com ${i.embalagem.fator}` : ''} · mínimo ${formatarNumero(i.estoqueMinimo)}` }))
     : aba === 'locais'
       ? locais.map((l) => ({ id: l.id, titulo: l.nome, subtitulo: l.centroCusto, ativo: l.ativo }))
-      : aba === 'ferramentas'
-        ? ferrs.map((f) => ({ id: f.id, titulo: f.codigo ? `${f.nome} ${f.codigo}` : f.nome, subtitulo: '', ativo: f.ativo }))
-        : funcs.map((f) => ({ id: f.id, titulo: f.nome, subtitulo: '', ativo: f.ativo }));
+      : funcs.map((f) => ({ id: f.id, titulo: f.nome, subtitulo: '', ativo: f.ativo }));
 
   async function importar() {
     try {
@@ -64,7 +60,7 @@ export function CadastrosTela({ estoque, versao = 0, onAlterou }: Props) {
       ListHeaderComponent={
         <View style={{ gap: 12 }}>
           <Chips prefixo="aba" valor={aba} onMudar={(a) => { setAba(a); setBusca(''); }}
-            opcoes={[{ id: 'itens', titulo: 'Itens' }, { id: 'locais', titulo: 'Frentes de serviço' }, { id: 'funcionarios', titulo: 'Funcionários' }, { id: 'ferramentas', titulo: 'Ferramentas' }]} />
+            opcoes={[{ id: 'itens', titulo: 'Itens' }, { id: 'locais', titulo: 'Frentes de serviço' }, { id: 'funcionarios', titulo: 'Funcionários' }]} />
           {aba === 'itens' && itens.length === 0 && (
             <Cartao>
               <Text style={estilos.subtitulo}>Nenhum item cadastrado. Importe a lista da planilha do galpão (45 itens, com o valor de referência de cada um).</Text>
@@ -72,7 +68,7 @@ export function CadastrosTela({ estoque, versao = 0, onAlterou }: Props) {
             </Cartao>
           )}
           <Mensagem ok={msg} />
-          <Botao testID="novo" titulo={aba === 'itens' ? '+ Novo item' : aba === 'locais' ? '+ Nova frente de serviço' : aba === 'ferramentas' ? '+ Nova ferramenta' : '+ Novo funcionário'} onPress={() => setEditando('novo')} />
+          <Botao testID="novo" titulo={aba === 'itens' ? '+ Novo item' : aba === 'locais' ? '+ Nova frente de serviço' : '+ Novo funcionário'} onPress={() => setEditando('novo')} />
           <TextInput testID="busca" style={estilos.entrada} placeholder="Buscar…" value={busca} onChangeText={setBusca} />
         </View>
       }
@@ -216,29 +212,6 @@ function FormFuncionario({ estoque, funcionario, onFim, onVoltar }: { estoque: E
           <Ativo valor={ativo} onMudar={setAtivo} />
           <Rodape erro={erro} onSalvar={() => void salvar()} onVoltar={onVoltar} />
         </Cartao>
-    </ScrollView>
-  );
-}
-
-function FormFerramenta({ estoque, ferramenta, onFim, onVoltar }: { estoque: Estoque; ferramenta?: Ferramenta; onFim: () => void; onVoltar: () => void }) {
-  const [nome, setNome] = useState(ferramenta?.nome ?? '');
-  const [codigo, setCodigo] = useState(ferramenta?.codigo ?? '');
-  const [ativo, setAtivo] = useState(ferramenta?.ativo ?? true);
-  const [erro, setErro] = useState<string>();
-  async function salvar() {
-    setErro(undefined);
-    try { await estoque.salvarFerramenta({ id: ferramenta?.id, nome, codigo, ativo }); onFim(); } catch (e) { setErro((e as Error).message); }
-  }
-  return (
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={estilos.conteudo}>
-      <Cartao>
-        <Text style={estilos.titulo}>{ferramenta ? 'Editar ferramenta' : 'Nova ferramenta'}</Text>
-        <Text style={estilos.subtitulo}>Cada unidade é cadastrada separada (ex.: Furadeira 01, Furadeira 02), para saber com quem está cada uma.</Text>
-        <Campo testID="nome" rotulo="Nome" value={nome} onChangeText={setNome} placeholder="Ex.: Furadeira de impacto" />
-        <Campo testID="codigo" rotulo="Número / código da unidade" value={codigo} onChangeText={setCodigo} placeholder="Ex.: 03 (opcional)" />
-        <Ativo valor={ativo} onMudar={setAtivo} />
-        <Rodape erro={erro} onSalvar={() => void salvar()} onVoltar={onVoltar} />
-      </Cartao>
     </ScrollView>
   );
 }

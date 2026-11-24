@@ -1,11 +1,14 @@
--- Etapa 2 (rode uma vez no SQL Editor do Supabase "Estoque"): ferramentas, empréstimos e entrega de EPI.
--- É seguro rodar de novo.
+-- Etapa 2 (rode uma vez no SQL Editor do Supabase "Estoque"): ferramentas e equipamentos locados.
+-- Cria as tabelas de cadastro (bens) e de movimentações de posse. É seguro rodar de novo.
+--
+-- Se você rodou a primeira versão da Etapa 2 (004 com ferramentas/emprestimos), essas duas tabelas antigas
+-- ficam sem uso; o app novo não as lê. Podem ser apagadas depois, se estiverem vazias:
+--   drop table public.emprestimos; drop table public.ferramentas;
 
--- 1. Tabelas novas (mesmo modelo das outras: um documento por linha)
 do $$
 declare t text;
 begin
-  foreach t in array array['ferramentas', 'emprestimos'] loop
+  foreach t in array array['bens', 'movimentos_bens'] loop
     execute format($f$
       create table if not exists public.%1$I (
         id text primary key,
@@ -32,25 +35,3 @@ begin
   end loop;
 end $$;
 
--- 2. Saldos para o consultor: a entrega de EPI também baixa o estoque
-drop function if exists public.saldos();
-create function public.saldos() returns table (item_id text, nome text, unidade text, embalagem jsonb, estoque_minimo numeric, categoria text, saldo numeric)
-language sql stable security definer set search_path = public as $$
-  select i.id, i.dados ->> 'nome', i.dados ->> 'unidade', i.dados -> 'embalagem',
-         coalesce((i.dados ->> 'estoqueMinimo')::numeric, 0),
-         i.dados ->> 'categoria',
-         coalesce(sum(case m.dados ->> 'tipo'
-           when 'entrada' then (m.dados ->> 'quantidade')::numeric
-           when 'devolucao' then (m.dados ->> 'quantidade')::numeric
-           when 'ajuste' then (m.dados ->> 'quantidade')::numeric
-           when 'saida' then -(m.dados ->> 'quantidade')::numeric
-           when 'epi' then -(m.dados ->> 'quantidade')::numeric
-           else 0 end), 0)
-  from public.itens i
-  left join public.movimentos m on m.dados ->> 'itemId' = i.id and m.dados -> 'cancelado' is null
-  where auth.uid() is not null and coalesce((i.dados ->> 'ativo')::boolean, true)
-  group by i.id
-  order by 2
-$$;
-revoke all on function public.saldos() from public, anon;
-grant execute on function public.saldos() to authenticated;

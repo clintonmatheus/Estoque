@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import JSZip from 'jszip';
 import { estoqueComCadastros } from '../testes/fabricas';
-import { relatorioEpi, relatorioFerramentasFora, relatorioGastos, relatorioHistorico, relatorioHtml, relatorioSaldo } from './relatorios';
+import { relatorioEpi, relatorioBens, relatorioLocados, relatorioGastos, relatorioHistorico, relatorioHtml, relatorioSaldo } from './relatorios';
 import { relatorioXlsx } from './xlsx';
 
 async function cenario() {
@@ -64,22 +64,34 @@ describe('relatórios', () => {
 });
 
 describe('relatórios da etapa 2', () => {
-  it('ferramentas fora do galpão, com atraso, ordenadas pela data prevista', async () => {
+  it('onde está cada ferramenta e equipamento, com atraso das ferramentas em campo', async () => {
     const { estoque, joao, riachuelo } = await estoqueComCadastros();
-    const maria = await estoque.salvarFuncionario({ nome: 'Maria', ativo: true });
-    const f1 = await estoque.salvarFerramenta({ nome: 'Furadeira', codigo: '03', ativo: true });
-    const f2 = await estoque.salvarFerramenta({ nome: 'Escada', ativo: true });
-    const f3 = await estoque.salvarFerramenta({ nome: 'Serra', ativo: true });
-    await estoque.emprestar({ ferramentaId: f1.id, funcionarioId: joao.id, localId: riachuelo.id, saida: '2026-11-02', prevista: '2026-11-09' });
-    await estoque.emprestar({ ferramentaId: f2.id, funcionarioId: maria.id, saida: '2026-11-10', prevista: '2026-11-20' });
-    const devolvida = await estoque.emprestar({ ferramentaId: f3.id, funcionarioId: maria.id, saida: '2026-11-01', prevista: '2026-11-05' });
-    await estoque.devolverFerramenta(devolvida.id, { devolvidoEm: '2026-11-04' });
-    const r = relatorioFerramentasFora(await estoque.ferramentas(), await estoque.emprestimos(), await estoque.funcionarios(), await estoque.locais(), '2026-11-11');
+    const galpao = { tipo: 'galpao' } as const;
+    const furadeira = await estoque.cadastrarBem({ nome: 'Furadeira', codigo: '03', tipo: 'ferramenta', controle: 'unidade', ativo: true }, { posse: galpao, quantidade: 1, data: '2026-11-01' });
+    const escora = await estoque.cadastrarBem({ nome: 'Escora', tipo: 'locado', controle: 'quantidade', ativo: true, locacao: { locadora: 'Agaé' } }, { posse: galpao, quantidade: 50, data: '2026-11-01' });
+    await estoque.movimentarBem({ bemId: furadeira.id, data: '2026-11-02', quantidade: 1, origem: galpao, destino: { tipo: 'campo', funcionarioId: joao.id, localId: riachuelo.id }, prevista: '2026-11-09' });
+    await estoque.movimentarBem({ bemId: escora.id, data: '2026-11-02', quantidade: 20, origem: galpao, destino: { tipo: 'campo', funcionarioId: joao.id, localId: riachuelo.id } });
+    const r = relatorioBens(await estoque.bens(), await estoque.movimentosBens(), await estoque.funcionarios(), await estoque.locais(), '2026-11-11');
     expect(r.linhas.map((l) => l.celulas)).toEqual([
-      ['FURADEIRA 03', 'João', 'Riachuelo', '02/11/2026', '09/11/2026', 'Atrasada 2 dias'],
-      ['ESCADA', 'Maria', '', '10/11/2026', '20/11/2026', 'No prazo'],
+      ['ESCORA', 'Locado', 'Galpão', '', 30, ''],
+      ['ESCORA', 'Locado', 'João', 'Riachuelo', 20, ''],
+      ['FURADEIRA 03', 'Ferramenta', 'João', 'Riachuelo', 1, 'Atrasada 2 dias'],
     ]);
-    expect(r.subtitulo).toContain('2 ferramentas');
+  });
+
+  it('locados: contrato, prazo e peças em obra diferente da cobrada', async () => {
+    const { estoque, joao, riachuelo } = await estoqueComCadastros();
+    const pedra = await estoque.salvarLocal({ nome: 'Pedra Grande', centroCusto: 'RMG', ativo: true });
+    const galpao = { tipo: 'galpao' } as const;
+    const escora = await estoque.cadastrarBem({
+      nome: 'Escora', tipo: 'locado', controle: 'quantidade', ativo: true,
+      locacao: { locadora: 'Agaé Locação', contrato: '1234', valor: 2.5, periodo: 'mes', inicio: '2026-10-01', prevista: '2026-11-14', localCobrancaId: riachuelo.id },
+    }, { posse: galpao, quantidade: 50, data: '2026-10-01' });
+    await estoque.movimentarBem({ bemId: escora.id, data: '2026-11-02', quantidade: 20, origem: galpao, destino: { tipo: 'campo', funcionarioId: joao.id, localId: pedra.id } });
+    await estoque.cadastrarBem({ nome: 'Alicate', tipo: 'ferramenta', controle: 'quantidade', ativo: true }, { posse: galpao, quantidade: 3, data: '2026-11-01' });
+    const r = relatorioLocados(await estoque.bens(), await estoque.movimentosBens(), await estoque.locais(), '2026-11-11');
+    expect(r.linhas).toHaveLength(1);
+    expect(r.linhas[0].celulas).toEqual(['ESCORA', 'Agaé Locação', '1234', 'R$ 2,50/mês', '01/10/2026', '14/11/2026', 'Riachuelo', 50, 'Vence em 3 dias', '20 em Pedra Grande']);
   });
 
   it('ficha de EPI por funcionário, sem entregas canceladas, filtrável por funcionário', async () => {

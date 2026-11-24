@@ -2,22 +2,24 @@ import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Text, View } from 'react-native';
 import type { Estoque } from '../dados/estoque';
 import { formatarDataBR } from '../domain/datas';
-import { epiParaTrocar, type EpiParaTrocar } from '../domain/ferramentas';
+import { epiParaTrocar, type EpiParaTrocar } from '../domain/epi';
 import type { Funcionario, Item, Movimento } from '../domain/tipos';
+import type { ServicoFotos } from '../fotos/servico';
 import { Cartao, Chips, Seletor } from './componentes';
+import { LancamentoTela } from './LancamentoTela';
 import { cores, estilos } from './estilos';
 
-type Filtro = 'trocas' | 'fichas';
+type Filtro = 'entregar' | 'trocas' | 'fichas';
 const JANELA_DIAS = 30;
 
-interface Props { estoque: Estoque; hoje: string; versao?: number }
+interface Props { estoque: Estoque; hoje: string; servicoFotos: ServicoFotos; versao?: number; onAlterou?: () => void }
 
 /** EPIs com troca vencida ou próxima, e a ficha de entregas de cada funcionário. */
-export function EpiTela({ estoque, hoje, versao = 0 }: Props) {
+export function EpiTela({ estoque, hoje, servicoFotos, versao = 0, onAlterou }: Props) {
   const [movs, setMovs] = useState<Movimento[]>([]);
   const [itens, setItens] = useState<Item[]>([]);
   const [funcs, setFuncs] = useState<Funcionario[]>([]);
-  const [filtro, setFiltro] = useState<Filtro>('trocas');
+  const [filtro, setFiltro] = useState<Filtro>('entregar');
   const [funcionarioId, setFuncionarioId] = useState<string>();
 
   useEffect(() => {
@@ -37,6 +39,20 @@ export function EpiTela({ estoque, hoje, versao = 0 }: Props) {
     ? trocas.map((t) => ({ chave: t.movimento.id, m: t.movimento, t }))
     : ficha.map((m) => ({ chave: m.id, m }));
 
+  const abas = (
+    <Chips prefixo="epi" valor={filtro} onMudar={setFiltro} opcoes={[
+      { id: 'entregar', titulo: 'Entregar' }, { id: 'trocas', titulo: `Trocas (${trocas.length})` }, { id: 'fichas', titulo: 'Ficha do funcionário' },
+    ]} />
+  );
+  if (filtro === 'entregar') {
+    return (
+      <View style={{ flex: 1 }}>
+        <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>{abas}</View>
+        <LancamentoTela estoque={estoque} tipo="epi" hoje={hoje} servicoFotos={servicoFotos} versao={versao} onSalvo={onAlterou} />
+      </View>
+    );
+  }
+
   return (
     <FlatList
       data={linhas}
@@ -45,9 +61,7 @@ export function EpiTela({ estoque, hoje, versao = 0 }: Props) {
       contentContainerStyle={estilos.conteudo}
       ListHeaderComponent={
         <View style={{ gap: 12 }}>
-          <Chips prefixo="epi" valor={filtro} onMudar={setFiltro} opcoes={[
-            { id: 'trocas', titulo: `Trocas (${trocas.length})` }, { id: 'fichas', titulo: 'Ficha do funcionário' },
-          ]} />
+          {abas}
           {filtro === 'trocas' && <Text style={estilos.subtitulo}>{`EPIs vencidos ou que vencem em até ${JANELA_DIAS} dias (considera só a última entrega de cada item a cada funcionário).`}</Text>}
           {filtro === 'fichas' && (
             <Seletor testID="epi-funcionario" rotulo="Funcionário" valor={funcionarioId} opcoes={funcs.filter((f) => f.ativo).map((f) => ({ id: f.id, titulo: f.nome }))} onEscolher={setFuncionarioId} />

@@ -25,15 +25,21 @@ saídas para as frentes de serviço, devoluções, transferências, inventário 
 
 **Atualização (categorias):** quem já rodou o `001`, rode também `supabase/003_categorias.sql` (uma vez).
 
-**Atualização (Etapa 2 — ferramentas e EPI):** rode também `supabase/004_ferramentas_epi.sql` (uma vez). Ele cria as tabelas de ferramentas e empréstimos e faz o saldo do consultor descontar o EPI entregue.
+**Atualização (Etapa 2 — equipamentos e EPI):** rode também, uma vez cada, `supabase/004_epi.sql` (o saldo do consultor passa a descontar o EPI entregue) e `supabase/005_equipamentos.sql` (tabelas de ferramentas/equipamentos locados e suas movimentações).
 
 As permissões foram testadas num Postgres local: `bash supabase/teste/rodar.sh`.
 
-## Etapa 2: ferramentas e EPI
+## Etapa 2: equipamentos e EPI
 
-- **Ferramentas (Mais → Ferramentas):** cada unidade é cadastrada à parte (Cadastros → Ferramentas, ex.: Furadeira 03). Empréstimo com quem retirou, frente de serviço (opcional), saída e **data prevista de devolução** (sugestão de 7 dias). Mostra o que está fora, com quem, e destaca as **atrasadas**. Devolução com data e estado da ferramenta; histórico por ferramenta.
-- **EPI (Lançar → EPI):** entrega a um funcionário baixa o estoque pelo PEPS, com **CA, tamanho e data de troca**. Não entra no custo por centro de custo. **Mais → EPI dos funcionários** lista trocas vencidas ou a vencer em 30 dias e a ficha de cada funcionário.
-- **Relatórios novos:** ferramentas fora do galpão; entrega de EPI por funcionário (PDF e Excel).
+- **Aba Equipamentos:** ferramentas próprias e equipamentos locados (andaimes, escoras, sapatas, pisos...). Cada um tem uma **posse atual**: no galpão, com uma pessoa (mestre/encarregado) em uma frente de serviço, ou fora da empresa. Toda mudança (galpão → obra, obra → obra, volta ao galpão, devolução à locadora, perda/baixa) é uma movimentação registrada com data e autor, e pode ser cancelada com motivo.
+  - **Controle:** cada peça individual (ex.: Furadeira 03, com data prevista de devolução e alerta de atraso) ou por quantidade (ex.: 120 escoras, divididas entre galpão e obras). O app bloqueia tirar mais peças do que há na posse.
+  - **Levantamento geral:** "+ Cadastrar" já pede onde o item está agora.
+  - **Locados:** locadora, nº do contrato, valor por peça (dia ou mês), início, fim previsto e a obra em que a locadora cobra. Alertas: locação vencida/vencendo (7 dias) e **peças em obra diferente da cobrada**.
+  - O número vermelho na aba mostra quantos itens têm alerta; o filtro "Alertas" lista só eles.
+- **Aba EPI:** *Entregar* (funcionário, CA, tamanho e data de troca; baixa o estoque pelo PEPS, sem custo por centro de custo), *Trocas* (vencidos ou a vencer em 30 dias) e *Ficha do funcionário*.
+- **Mais:** Histórico, Relatórios, Cadastros e Inventário.
+- **Relatórios novos (PDF e Excel):** ferramentas e equipamentos (onde está cada um), equipamentos locados e entrega de EPI por funcionário.
+- Só admin e almoxarife veem e lançam; o consultor continua vendo apenas saldos de material.
 
 ## Instalar
 
