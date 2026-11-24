@@ -91,7 +91,7 @@ export function FinanceiroTela({ financeiro, versao = 0, onAlterou, abaInicial =
       {pode && d.empresas.length === 0 && (
         <Cartao>
           <Text style={estilos.titulo}>Começar</Text>
-          <Text style={estilos.subtitulo}>Cria ALN e Passos com as contas informadas (ALN: BB e Inter; Passos: BB, Itaú, Inter e Nubank), os centros Administração e Estoque/Galpão de cada empresa e a lista de tipos de despesa. Depois é só completar CNPJ, agência e conta.</Text>
+          <Text style={estilos.subtitulo}>Cria ALN e Passos com as contas informadas (ALN: BB e Inter; Passos: BB, Itaú, Inter e Nubank), os centros Administração e Estoque/Galpão (um de cada, para as duas empresas) e a lista de tipos de despesa. Depois é só completar CNPJ, agência e conta.</Text>
           <Botao testID="iniciais" titulo="Criar cadastros iniciais" onPress={() => void iniciais()} />
         </Cartao>
       )}
