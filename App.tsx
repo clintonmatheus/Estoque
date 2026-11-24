@@ -17,6 +17,7 @@ import { Sincronizador } from './src/sync/sincronizador';
 import { AutenticacaoSupabase, criarClienteSupabase, RemotoSupabase } from './src/sync/supabase';
 import { cores } from './src/telas/estilos';
 import { LoginTela } from './src/telas/LoginTela';
+import { Previa } from './src/previa/Previa';
 import { Raiz } from './src/telas/Raiz';
 import type { SaidaRelatorio } from './src/telas/RelatoriosTela';
 
@@ -29,7 +30,13 @@ const saida: SaidaRelatorio = {
   xlsx: async (r) => compartilharXlsx(await relatorioXlsx(r), r.arquivo),
 };
 
+/** Build de prévia (manual de treinamento): EXPO_PUBLIC_PREVIA=1 mostra o app com dados de exemplo, sem login nem servidor. */
 export default function App() {
+  if (process.env.EXPO_PUBLIC_PREVIA === '1') return <Previa />;
+  return <AppReal />;
+}
+
+function AppReal() {
   const [armazenamento, setArmazenamento] = useState<Armazenamento>();
   /** undefined = carregando; null = sem login */
   const [usuario, setUsuario] = useState<Usuario | null>();

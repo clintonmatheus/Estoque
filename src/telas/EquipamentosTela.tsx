@@ -234,7 +234,7 @@ function Detalhe({ estoque, bem, dados, hoje, onVoltar, onEditar, onAlterou }: {
               { id: 'perda', titulo: 'Perdido' }, { id: 'baixa', titulo: 'Baixa' },
             ]} />
             {destino === 'campo' && (
-              <EscolhaPosse prefixo="mov" valor={posseCampo ?? undefined} onMudar={setPosseCampo} funcionarios={dados.funcs} locais={dados.locais} rotulo="Para quem e onde" />
+              <EscolhaPosse prefixo="mov" valor={posseCampo ?? undefined} onMudar={setPosseCampo} funcionarios={dados.funcs} locais={dados.locais} rotulo="Para quem e onde" soCampo />
             )}
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <Campo testID="mov-data" rotulo="Data" value={data} onChangeText={setData} style={{ flex: 1 }} keyboardType="numbers-and-punctuation" />

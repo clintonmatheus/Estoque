@@ -10,8 +10,10 @@ import { estilos } from './estilos';
 const dataOpcional = (t: string) => (t.trim() ? analisarDataBR(t) : undefined);
 
 /** Seletor "onde está": galpão ou com uma pessoa em uma frente de serviço. */
-export function EscolhaPosse({ prefixo, valor, onMudar, funcionarios, locais, rotulo = 'Onde está' }: {
+export function EscolhaPosse({ prefixo, valor, onMudar, funcionarios, locais, rotulo = 'Onde está', soCampo }: {
   prefixo: string; valor: Posse | undefined; onMudar: (p: Posse | undefined) => void; funcionarios: Funcionario[]; locais: Local[]; rotulo?: string;
+  /** Só pessoa + obra (sem a opção galpão). */
+  soCampo?: boolean;
 }) {
   const [local, setLocal] = useState<string | undefined>(valor?.tipo === 'campo' ? valor.localId : undefined);
   const [func, setFunc] = useState<string | undefined>(valor?.tipo === 'campo' ? valor.funcionarioId : undefined);
@@ -20,9 +22,9 @@ export function EscolhaPosse({ prefixo, valor, onMudar, funcionarios, locais, ro
   return (
     <View style={{ gap: 8 }}>
       <Text style={estilos.rotulo}>{rotulo}</Text>
-      <Chips prefixo={`${prefixo}-onde`} valor={valor?.tipo === 'galpao' ? 'galpao' : 'campo'} onMudar={(v) => (v === 'galpao' ? onMudar({ tipo: 'galpao' }) : atualizar(func, local))}
-        opcoes={[{ id: 'galpao', titulo: 'No galpão' }, { id: 'campo', titulo: 'Com pessoa em obra' }]} />
-      {(campo || (valor === undefined)) && (
+      {!soCampo && <Chips prefixo={`${prefixo}-onde`} valor={valor?.tipo === 'galpao' ? 'galpao' : 'campo'} onMudar={(v) => (v === 'galpao' ? onMudar({ tipo: 'galpao' }) : atualizar(func, local))}
+        opcoes={[{ id: 'galpao', titulo: 'No galpão' }, { id: 'campo', titulo: 'Com pessoa em obra' }]} />}
+      {(soCampo || campo || valor === undefined) && (
         <>
           <Seletor testID={`${prefixo}-pessoa`} rotulo="Com quem (mestre ou encarregado)" valor={func} opcoes={funcionarios.filter((f) => f.ativo).map((f) => ({ id: f.id, titulo: f.nome }))}
             onEscolher={(id) => atualizar(id, local)} />
