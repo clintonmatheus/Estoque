@@ -18,6 +18,7 @@ import { EstoqueTela } from './EstoqueTela';
 import { EquipamentosTela } from './EquipamentosTela';
 import { cores, estilos } from './estilos';
 import { HistoricoTela } from './HistoricoTela';
+import { ImportarTela } from './ImportarTela';
 import { InventarioTela } from './InventarioTela';
 import { LancamentoTela } from './LancamentoTela';
 import { RelatoriosTela, type SaidaRelatorio } from './RelatoriosTela';
@@ -45,6 +46,8 @@ interface Props {
   estadoSync?: EstadoSync;
   onSincronizar?: () => void;
   onSair?: () => void;
+  /** Abre o seletor de arquivos e devolve a planilha (importação do levantamento). */
+  escolherPlanilha?: () => Promise<Uint8Array | undefined>;
 }
 
 export function Raiz(p: Props) {
@@ -60,10 +63,10 @@ export function Raiz(p: Props) {
   return <RaizLancador {...p} estoque={p.estoque} />;
 }
 
-function RaizLancador({ usuario, estoque, servicoFotos, saida, hoje, agora, versao = 0, estadoSync, onSincronizar, onSair }: Props & { estoque: Estoque }) {
+function RaizLancador({ usuario, estoque, servicoFotos, saida, hoje, agora, versao = 0, estadoSync, onSincronizar, onSair, escolherPlanilha }: Props & { estoque: Estoque }) {
   const [aba, setAba] = useState<Aba>('estoque');
   const [tipo, setTipo] = useState<Lancamento['tipo']>('saida');
-  const [mais, setMais] = useState<'menu' | 'historico' | 'relatorios' | 'cadastros' | 'inventario'>('menu');
+  const [mais, setMais] = useState<'menu' | 'historico' | 'relatorios' | 'cadastros' | 'inventario' | 'importar'>('menu');
   const [avisos, setAvisos] = useState({ equipamentos: 0, epi: 0 });
   const [local, setLocal] = useState(0);
   const v = versao + local;
@@ -81,7 +84,7 @@ function RaizLancador({ usuario, estoque, servicoFotos, saida, hoje, agora, vers
     });
   }, [estoque, hoje, v]);
 
-  const TITULOS = { historico: 'Histórico', relatorios: 'Relatórios', cadastros: 'Cadastros', inventario: 'Inventário' } as const;
+  const TITULOS = { historico: 'Histórico', relatorios: 'Relatórios', cadastros: 'Cadastros', inventario: 'Inventário', importar: 'Importar planilha' } as const;
   const titulo = aba === 'mais' && mais !== 'menu' ? TITULOS[mais] : ABAS.find((a) => a.id === aba)!.titulo;
   return (
     <View style={estilos.tela}>
@@ -105,6 +108,7 @@ function RaizLancador({ usuario, estoque, servicoFotos, saida, hoje, agora, vers
         {aba === 'mais' && mais === 'historico' && <HistoricoTela estoque={estoque} versao={v} onAlterou={alterou} />}
         {aba === 'mais' && mais === 'relatorios' && <RelatoriosTela estoque={estoque} hoje={hoje} agora={agora} saida={saida} versao={v} />}
         {aba === 'mais' && mais === 'cadastros' && <CadastrosTela estoque={estoque} versao={v} onAlterou={alterou} />}
+        {aba === 'mais' && mais === 'importar' && <ImportarTela estoque={estoque} hoje={hoje} escolherArquivo={escolherPlanilha ?? (async () => undefined)} onAlterou={alterou} />}
         {aba === 'mais' && mais === 'inventario' && <InventarioTela estoque={estoque} hoje={hoje} versao={v} onConcluido={alterou} />}
         {aba === 'mais' && mais === 'menu' && (
           <ScrollView contentContainerStyle={estilos.conteudo}>
@@ -113,6 +117,7 @@ function RaizLancador({ usuario, estoque, servicoFotos, saida, hoje, agora, vers
             <ItemMenu testID="abrir-relatorios" icone="document-text-outline" titulo="Relatórios" sub="Saldo, gastos por obra, equipamentos e EPI (PDF e Excel)" onPress={() => setMais('relatorios')} />
             <ItemMenu testID="abrir-cadastros" icone="pricetags-outline" titulo="Cadastros" sub="Itens, frentes de serviço e funcionários" onPress={() => setMais('cadastros')} />
             <ItemMenu testID="abrir-inventario" icone="clipboard-outline" titulo="Inventário" sub="Contagem física do galpão" onPress={() => setMais('inventario')} />
+            <ItemMenu testID="abrir-importar" icone="cloud-upload-outline" titulo="Importar planilha" sub="Levantamento geral: materiais, equipamentos, frentes e funcionários" onPress={() => setMais('importar')} />
           </ScrollView>
         )}
       </View>

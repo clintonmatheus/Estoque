@@ -7,6 +7,7 @@ import { dataLocal } from './src/domain/datas';
 import { podeLancar, type Usuario } from './src/domain/tipos';
 import { novoId } from './src/fotos/id';
 import { servicoFotosDoApp } from './src/fotos/servico';
+import { escolherPlanilha } from './src/importacao/escolher';
 import { compartilharPdf, compartilharXlsx } from './src/relatorios/saida';
 import { relatorioXlsx } from './src/relatorios/xlsx';
 import type { Armazenamento } from './src/storage/contrato';
@@ -83,7 +84,7 @@ export default function App() {
   else if (!usuario) conteudo = <LoginTela entrar={(e, s) => auth.entrar(e, s)} onEntrou={setUsuario} />;
   else {
     conteudo = (
-      <Raiz usuario={usuario} estoque={motor?.estoque} carregarSaldos={() => remoto.saldos()} servicoFotos={servicoFotosDoApp}
+      <Raiz usuario={usuario} estoque={motor?.estoque} carregarSaldos={() => remoto.saldos()} servicoFotos={servicoFotosDoApp} escolherPlanilha={escolherPlanilha}
         saida={saida} hoje={dataLocal(agora())} agora={agora} versao={versao} estadoSync={estado}
         onSincronizar={motor ? () => void motor.agendador.agora() : undefined} onSair={sair} />
     );

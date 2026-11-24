@@ -3,7 +3,8 @@ import { formatarQuantidade } from '../domain/formato';
 import { ITENS_INICIAIS } from '../domain/itensIniciais';
 import { mesmaPosse, posicoesDoBem, problemasDeBens, totalDoBem } from '../domain/bens';
 import { podeLancar, type Anexo, type Autoria, type Bem, type Funcionario, type Item, type Local, type Locacao, type Movimento, type MotivoSaidaBem, type MovimentoBem, type Posse, type TipoMovimento, type Usuario } from '../domain/tipos';
-import type { Armazenamento, Tabela } from '../storage/contrato';
+import { TABELAS, type Armazenamento, type Tabela } from '../storage/contrato';
+import { criarArmazenamentoMemoria } from '../storage/memoria';
 
 export interface OpcoesEstoque {
   agora: () => string;
@@ -49,6 +50,16 @@ const texto = (s?: string) => (s?.trim() ? s.trim() : undefined);
 /** Ponto único usado pelas telas: valida, grava no aparelho, registra autoria e enfileira o envio. */
 export class Estoque {
   constructor(private a: Armazenamento, public readonly usuario: Usuario, private o: OpcoesEstoque) {}
+
+  /** Cópia em memória com os mesmos dados, para testar uma importação sem gravar nada. */
+  async copiaParaSimulacao(): Promise<Estoque> {
+    const m = criarArmazenamentoMemoria();
+    for (const t of TABELAS) {
+      const destino = m[t] as { salvar(d: unknown): Promise<void> };
+      for (const d of await this.a[t].listar()) await destino.salvar(d);
+    }
+    return new Estoque(m, this.usuario, { agora: this.o.agora, novoId: this.o.novoId });
+  }
 
   private autoria(): Autoria { return { id: this.usuario.id, nome: this.usuario.nome, em: this.o.agora() }; }
 
