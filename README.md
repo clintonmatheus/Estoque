@@ -41,6 +41,11 @@ As permissões foram testadas num Postgres local: `bash supabase/teste/rodar.sh`
 - **Relatórios novos (PDF e Excel):** ferramentas e equipamentos (onde está cada um), equipamentos locados e entrega de EPI por funcionário.
 - Só admin e almoxarife veem e lançam; o consultor continua vendo apenas saldos de material.
 
+## Levantamento e treinamento
+
+- **Planilha de levantamento:** `modelos/Levantamento_Estoque.xlsx` (frentes, funcionários, materiais com saldo inicial, ferramentas e locados). Importação em **Mais → Importar planilha**: o app simula, lista erros com aba e linha e só grava sem erros. Regerar o modelo: `python3 scripts/gerar_modelo_planilha.py .`
+- **Manual em PDF:** `docs/Manual_Estoque.pdf` (como regerar em `docs/manual/LEIAME.md`).
+
 ## Instalar
 
 No GitHub, aba **Actions**:
