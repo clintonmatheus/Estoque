@@ -104,8 +104,8 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
           }
           if (tipo !== 'entrada') return linha;
           const c = lerNumero(ln.custo);
-          if (c === undefined || c < 0) throw new Error(`Informe o valor unitário de ${it.nome}`);
-          return { ...linha, custoUnitario: ln.emEmbalagem && it.embalagem ? c / it.embalagem.fator : c };
+          if (c !== undefined && c < 0) throw new Error(`Valor unitário inválido: ${it.nome}`);
+          return c === undefined ? linha : { ...linha, custoUnitario: ln.emEmbalagem && it.embalagem ? c / it.embalagem.fator : c };
         }),
       };
       setSalvando(true);
@@ -171,7 +171,7 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
               <Campo testID={`qtd-${it.id}`} rotulo={`Quantidade (${ln.emEmbalagem && it.embalagem ? it.embalagem.nome : it.unidade})`}
                 value={ln.qtd} onChangeText={(v) => mudar(ln.chave, { qtd: v })} keyboardType="decimal-pad" style={{ flex: 1 }} />
               {tipo === 'entrada' && (
-                <Campo testID={`custo-${it.id}`} rotulo={`Valor unit. (R$/${ln.emEmbalagem && it.embalagem ? it.embalagem.nome : it.unidade})`}
+                <Campo testID={`custo-${it.id}`} rotulo={`Valor unit. (R$/${ln.emEmbalagem && it.embalagem ? it.embalagem.nome : it.unidade}) — opcional`}
                   value={ln.custo} onChangeText={(v) => mudar(ln.chave, { custo: v })} keyboardType="decimal-pad" style={{ flex: 1 }} />
               )}
             </View>

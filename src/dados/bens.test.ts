@@ -39,6 +39,14 @@ describe('Estoque — cadastro de bens', () => {
     expect(ok.locacao).toEqual({ locadora: 'Agaé Locação', contrato: '1234', valor: 2.5, periodo: 'mes', inicio: '2026-11-01', prevista: '2026-12-01' });
   });
 
+  it('locação aceita período diário, semanal, quinzenal e mensal', async () => {
+    const { estoque } = await cenario();
+    for (const periodo of ['dia', 'semana', 'quinzena', 'mes'] as const) {
+      const b = await estoque.salvarBem({ nome: `Piso ${periodo}`, tipo: 'locado', controle: 'quantidade', ativo: true, locacao: { locadora: 'Agaé', valor: 1, periodo } });
+      expect(b.locacao?.periodo).toBe(periodo);
+    }
+  });
+
   it('ferramenta própria não leva dados de locação; controle não muda depois de movimentar', async () => {
     const { estoque } = await cenario();
     const b = await estoque.cadastrarBem({ nome: 'Alicate', tipo: 'ferramenta', controle: 'quantidade', ativo: true, locacao: { locadora: 'X' } },

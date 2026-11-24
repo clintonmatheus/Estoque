@@ -18,6 +18,17 @@ describe('Estoque — lançamentos', () => {
     expect((await armazenamento.fila.listar()).filter((x) => x.tabela === 'movimentos')).toHaveLength(3);
   });
 
+  it('entrada sem valor (material antigo) entra só no controle de quantidade e não apaga o último custo', async () => {
+    const { estoque, tinta, riachuelo, joao } = await estoqueComCadastros();
+    await estoque.lancar({ tipo: 'entrada', data: '2026-11-01', linhas: [{ itemId: tinta.id, quantidade: 2, custoUnitario: 50 }] });
+    await estoque.lancar({ tipo: 'entrada', data: '2026-11-02', linhas: [{ itemId: tinta.id, quantidade: 3 }] });
+    const p = await estoque.posicao();
+    expect(p.itens[tinta.id].quantidade).toBe(5);
+    expect(p.itens[tinta.id].ultimoCusto).toBe(50);
+    await estoque.lancar({ tipo: 'saida', data: '2026-11-03', localId: riachuelo.id, funcionarioId: joao.id, linhas: [{ itemId: tinta.id, quantidade: 4 }] });
+    expect((await estoque.posicao()).itens[tinta.id].valor).toBe(0); // restam 1 sem valor (as 2 com valor saíram primeiro, PEPS)
+  });
+
   it('bloqueia saída maior que o saldo, com mensagem clara', async () => {
     const { estoque, tinta, riachuelo, joao } = await estoqueComCadastros();
     await estoque.lancar({ tipo: 'entrada', data: '2026-11-10', linhas: [{ itemId: tinta.id, quantidade: 2, custoUnitario: 50 }] });
@@ -28,7 +39,7 @@ describe('Estoque — lançamentos', () => {
 
   it('exige os campos de cada tipo', async () => {
     const { estoque, tinta, riachuelo, joao } = await estoqueComCadastros();
-    await expect(estoque.lancar({ tipo: 'entrada', data: '2026-11-10', linhas: [{ itemId: tinta.id, quantidade: 2 }] })).rejects.toThrow('Informe o valor unitário');
+    await expect(estoque.lancar({ tipo: 'entrada', data: '2026-11-10', linhas: [{ itemId: tinta.id, quantidade: 2, custoUnitario: -1 }] })).rejects.toThrow('Valor unitário inválido');
     await expect(estoque.lancar({ tipo: 'saida', data: '2026-11-10', funcionarioId: joao.id, linhas: [{ itemId: tinta.id, quantidade: 1 }] })).rejects.toThrow('Informe a frente de serviço de destino');
     await expect(estoque.lancar({ tipo: 'saida', data: '2026-11-10', localId: riachuelo.id, linhas: [{ itemId: tinta.id, quantidade: 1 }] })).rejects.toThrow('Informe quem retirou');
     await expect(estoque.lancar({ tipo: 'transferencia', data: '2026-11-10', localId: riachuelo.id, localDestinoId: riachuelo.id, linhas: [{ itemId: tinta.id, quantidade: 1 }] })).rejects.toThrow('Origem e destino devem ser diferentes');

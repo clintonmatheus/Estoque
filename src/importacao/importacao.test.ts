@@ -38,6 +38,25 @@ describe('leitura de células', () => {
   });
 });
 
+describe('importação do levantamento — período e custo', () => {
+  it('aceita Diária, Semanal, Quinzenal e Mensal e material sem custo', async () => {
+    const bytes = await planilha({
+      Materiais: [cab('materiais'), ['Cimento velho', 'saco', undefined, undefined, 10]],
+      Equipamentos: [cab('equipamentos'),
+        eq({ Nome: 'A', Tipo: 'Locado', Controle: 'Quantidade', Quantidade: 1, Locadora: 'X', 'Valor por peça (R$)': 1, Período: 'Diária' }),
+        eq({ Nome: 'B', Tipo: 'Locado', Controle: 'Quantidade', Quantidade: 1, Locadora: 'X', 'Valor por peça (R$)': 1, Período: 'Semanal' }),
+        eq({ Nome: 'C', Tipo: 'Locado', Controle: 'Quantidade', Quantidade: 1, Locadora: 'X', 'Valor por peça (R$)': 1, Período: 'Quinzenal' }),
+        eq({ Nome: 'D', Tipo: 'Locado', Controle: 'Quantidade', Quantidade: 1, Locadora: 'X', 'Valor por peça (R$)': 1, Período: 'Mensal' }),
+      ],
+    });
+    const r = lerLevantamento(await lerXlsx(bytes));
+    expect(r.erros).toEqual([]);
+    expect(r.equipamentos.map((g) => g.locacao?.periodo)).toEqual(['dia', 'semana', 'quinzena', 'mes']);
+    expect(r.materiais[0]).toMatchObject({ nome: 'Cimento velho', quantidade: 10 });
+    expect(r.materiais[0].custo).toBeUndefined();
+  });
+});
+
 describe('importação do levantamento', () => {
   async function exemplo() {
     const t = await estoqueComCadastros(); // já tem João, Riachuelo, TINTA e PISO
@@ -114,7 +133,6 @@ describe('importação do levantamento', () => {
     const { erros } = lerLevantamento(await lerXlsx(bytes));
     expect(erros.map((e) => `${e.aba} ${e.linha}: ${e.mensagem}`)).toEqual([
       'Frentes de serviço 2: Informe o centro de custo (contrato)',
-      'Materiais 2: Informe o custo unitário (é usado no custo PEPS)',
       'Materiais 3: Número inválido: muito',
       'Equipamentos 2: Individual: uma linha por unidade (quantidade 1), com códigos diferentes',
       'Equipamentos 3: Tipo inválido: "Própria" (use ferramenta ou locado)',

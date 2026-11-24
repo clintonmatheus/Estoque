@@ -34,7 +34,7 @@ texto = [
     ('', ''),
     ('MATERIAIS', 'secao'),
     ('• Quantidade no galpão: o que foi contado, na unidade do item (revestimento em PEÇAS, não caixas).', ''),
-    ('• Custo unitário: valor de uma unidade, usado no custo PEPS. Obrigatório quando há quantidade.', ''),
+    ('• Custo unitário: valor de uma unidade, usado no custo PEPS. Pode ficar em branco (material antigo sem valor: só entra no controle de quantidade).', ''),
     ('• Item que já tem saldo no app não é importado (use o Inventário do app para corrigir).', ''),
     ('• Linhas com quantidade vazia ou zero só cadastram o item (ou atualizam o estoque mínimo/categoria).', ''),
     ('', ''),
@@ -44,12 +44,12 @@ texto = [
     ('• Quantidade: se as peças estão espalhadas, repita o Nome em várias linhas, uma para cada lugar (ex.: 40 no galpão, 60 com João na obra Riachuelo). Os dados da locação ficam na primeira linha.', ''),
     ('• Onde está: Galpão ou Obra. Se for Obra, preencha Com quem (funcionário) e Frente de serviço, escritos igual às outras abas ou ao app.', ''),
     ('• Devolver até: só para ferramenta individual que está em obra (opcional).', ''),
-    ('• Locados: Locadora é obrigatória. Valor por peça e Período (Dia ou Mês), início, fim previsto e a obra em que a locadora cobra são opcionais, mas ajudam nos alertas.', ''),
+    ('• Locados: Locadora é obrigatória. Valor por peça e Período (Diária, Semanal, Quinzenal ou Mensal), início, fim previsto e a obra em que a locadora cobra são opcionais, mas ajudam nos alertas.', ''),
     ('• Datas no formato dd/mm/aaaa.', ''),
     ('', ''),
     ('EXEMPLOS (aba Equipamentos)', 'secao'),
     ('FURADEIRA DE IMPACTO | 03 | Ferramenta | Individual | | Obra | João | Riachuelo | 30/11/2026', ''),
-    ('ESCORA METÁLICA | | Locado | Quantidade | 40 | Galpão | | | | Agaé Locação | 1234 | 2,50 | Mês | 01/10/2026 | 31/12/2026 | Riachuelo', ''),
+    ('ESCORA METÁLICA | | Locado | Quantidade | 40 | Galpão | | | | Agaé Locação | 1234 | 2,50 | Mensal | 01/10/2026 | 31/12/2026 | Riachuelo', ''),
     ('ESCORA METÁLICA | | Locado | Quantidade | 60 | Obra | João | Riachuelo', ''),
 ]
 for i, (t, estilo) in enumerate(texto, start=1):
@@ -84,7 +84,7 @@ fu = aba('Funcionários', [('Nome', 40, 'Como aparece no app (ex.: João Silva)'
 ma = aba('Materiais', [
     ('Item', 52, 'Nome do item. Itens novos: escreva no fim da lista.'), ('Unidade', 10, 'Ex.: un, lata, pç, kg, m'),
     ('Categoria', 24, 'Opcional. Vazio: o app sugere pelo nome.'), ('Estoque mínimo', 14, 'Opcional. Abaixo disso o app avisa.'),
-    ('Quantidade no galpão', 14, 'Quantidade contada, na unidade do item.'), ('Custo unitário (R$)', 16, 'Valor de uma unidade. Obrigatório se houver quantidade.'),
+    ('Quantidade no galpão', 14, 'Quantidade contada, na unidade do item.'), ('Custo unitário (R$)', 16, 'Valor de uma unidade. Opcional: em branco = sem valor.'),
 ])
 for i, (nome, unidade, custo) in enumerate(itens, start=2):
     ma.cell(row=i, column=1, value=nome)
@@ -100,13 +100,13 @@ eq = aba('Equipamentos', [
     ('Tipo', 12, 'Ferramenta ou Locado'), ('Controle', 12, 'Individual ou Quantidade'), ('Quantidade', 11, 'Peças neste lugar (controle por quantidade)'),
     ('Onde está', 11, 'Galpão ou Obra'), ('Com quem', 24, 'Funcionário (se estiver em obra)'), ('Frente de serviço', 22, 'Obra/frente (se estiver em obra)'),
     ('Devolver até', 13, 'Opcional: ferramenta individual em obra'), ('Locadora', 22, 'Obrigatória para Locado'), ('Nº do contrato', 13, ''),
-    ('Valor por peça (R$)', 13, 'Opcional'), ('Período', 9, 'Dia ou Mês'), ('Início da locação', 13, ''), ('Fim previsto', 13, ''),
+    ('Valor por peça (R$)', 13, 'Opcional'), ('Período', 11, 'Diária, Semanal, Quinzenal ou Mensal'), ('Início da locação', 13, ''), ('Fim previsto', 13, ''),
     ('Obra cobrada', 22, 'Frente em que a locadora cobra este equipamento'), ('Observação', 30, ''),
 ])
 lista(eq, 'C', '"Ferramenta,Locado"')
 lista(eq, 'D', '"Individual,Quantidade"')
 lista(eq, 'F', '"Galpão,Obra"')
-lista(eq, 'M', '"Dia,Mês"')
+lista(eq, 'M', '"Diária,Semanal,Quinzenal,Mensal"')
 lista(eq, 'G', "='Funcionários'!$A$2:$A$500")
 lista(eq, 'H', "='Frentes de serviço'!$A$2:$A$500")
 lista(eq, 'P', "='Frentes de serviço'!$A$2:$A$500")

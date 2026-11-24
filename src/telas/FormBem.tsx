@@ -3,7 +3,7 @@ import { ScrollView, Switch, Text, View } from 'react-native';
 import type { Estoque } from '../dados/estoque';
 import { analisarDataBR, formatarDataBR } from '../domain/datas';
 import { lerNumero } from '../domain/formato';
-import type { Bem, Funcionario, Local, Posse } from '../domain/tipos';
+import { PERIODOS_LOCACAO, type Bem, type Funcionario, type Local, type PeriodoLocacao, type Posse } from '../domain/tipos';
 import { Botao, Campo, Cartao, Chips, Mensagem, Seletor } from './componentes';
 import { estilos } from './estilos';
 
@@ -55,7 +55,7 @@ export function FormBem({ estoque, bem, hoje, funcionarios, locais, onFim, onVol
   const [locadora, setLocadora] = useState(l?.locadora ?? '');
   const [contrato, setContrato] = useState(l?.contrato ?? '');
   const [valor, setValor] = useState(l?.valor !== undefined ? String(l.valor).replace('.', ',') : '');
-  const [periodo, setPeriodo] = useState<'dia' | 'mes'>(l?.periodo ?? 'mes');
+  const [periodo, setPeriodo] = useState<PeriodoLocacao>(l?.periodo ?? 'mes');
   const [inicio, setInicio] = useState(l?.inicio ? formatarDataBR(l.inicio) : '');
   const [fim, setFim] = useState(l?.prevista ? formatarDataBR(l.prevista) : '');
   const [cobrada, setCobrada] = useState<string | undefined>(l?.localCobrancaId);
@@ -103,7 +103,7 @@ export function FormBem({ estoque, bem, hoje, funcionarios, locais, onFim, onVol
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Campo testID="loc-valor" rotulo="Valor por peça (R$)" value={valor} onChangeText={setValor} keyboardType="decimal-pad" style={{ flex: 1 }} placeholder="Opcional" />
           </View>
-          <Chips prefixo="loc-periodo" valor={periodo} onMudar={setPeriodo} opcoes={[{ id: 'dia', titulo: 'Por dia' }, { id: 'mes', titulo: 'Por mês' }]} />
+          <Chips prefixo="loc-periodo" valor={periodo} onMudar={setPeriodo} opcoes={PERIODOS_LOCACAO.map((p) => ({ id: p.id, titulo: p.titulo }))} />
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Campo testID="loc-inicio" rotulo="Início" value={inicio} onChangeText={setInicio} keyboardType="numbers-and-punctuation" style={{ flex: 1 }} placeholder="dd/mm/aaaa" />
             <Campo testID="loc-fim" rotulo="Fim previsto" value={fim} onChangeText={setFim} keyboardType="numbers-and-punctuation" style={{ flex: 1 }} placeholder="dd/mm/aaaa" />

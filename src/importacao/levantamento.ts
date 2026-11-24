@@ -1,3 +1,4 @@
+import type { PeriodoLocacao } from '../domain/tipos';
 import { dataDaCelula, type Abas, type Celula } from './lerXlsx';
 
 /** Abas e cabeçalhos da planilha de levantamento (modelos/Levantamento_Estoque.xlsx). */
@@ -21,7 +22,7 @@ export interface LinhaMaterial { linha: number; nome: string; unidade?: string; 
 export interface LinhaPosse { linha: number; quantidade: number; ondeObra: boolean; funcionario?: string; frente?: string; prevista?: string }
 export interface GrupoEquipamento {
   linhas: number[]; nome: string; codigo?: string; tipo: 'ferramenta' | 'locado'; controle: 'unidade' | 'quantidade'; observacao?: string;
-  locacao?: { locadora: string; contrato?: string; valor?: number; periodo?: 'dia' | 'mes'; inicio?: string; prevista?: string; obraCobrada?: string };
+  locacao?: { locadora: string; contrato?: string; valor?: number; periodo?: PeriodoLocacao; inicio?: string; prevista?: string; obraCobrada?: string };
   posses: LinhaPosse[];
 }
 export interface Levantamento {
@@ -62,6 +63,11 @@ function linhasDaAba(abas: Abas, aba: { nome: string; colunas: readonly string[]
   }
   return saida;
 }
+
+const PERIODOS_ACEITOS: Record<string, PeriodoLocacao> = {
+  dia: 'dia', diaria: 'dia', diario: 'dia', semana: 'semana', semanal: 'semana',
+  quinzena: 'quinzena', quinzenal: 'quinzena', mes: 'mes', mensal: 'mes',
+};
 
 function opcao<T extends string>(c: Celula, valores: Record<string, T>, campo: string): T | undefined {
   const t = texto(c);
@@ -105,8 +111,9 @@ export function lerLevantamento(abas: Abas): Levantamento {
     if (qtd !== undefined && qtd !== 0) {
       if (qtd < 0) throw new Error('Quantidade não pode ser negativa');
       const custo = numero(v('Custo unitário (R$)'));
-      if (custo === undefined || custo < 0) throw new Error('Informe o custo unitário (é usado no custo PEPS)');
-      m.quantidade = qtd; m.custo = custo;
+      if (custo !== undefined && custo < 0) throw new Error('Custo não pode ser negativo');
+      m.quantidade = qtd; if (custo !== undefined) m.custo = custo; // sem custo: material antigo, só catalogado
+
     }
     return m;
   }, r.materiais);
@@ -152,7 +159,7 @@ export function lerLevantamento(abas: Abas): Levantamento {
       const valor = numero(v('Valor por peça (R$)'));
       if (valor !== undefined) {
         g.locacao.valor = valor;
-        g.locacao.periodo = opcao(v('Período'), { dia: 'dia', mes: 'mes' } as const, 'Período') ?? 'mes';
+        g.locacao.periodo = opcao(v('Período'), PERIODOS_ACEITOS, 'Período') ?? 'mes';
       }
       const inicio = dataDaCelula(v('Início da locação')); if (inicio) g.locacao.inicio = inicio;
       const fim = dataDaCelula(v('Fim previsto')); if (fim) g.locacao.prevista = fim;

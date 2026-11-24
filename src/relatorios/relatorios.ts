@@ -2,7 +2,7 @@ import { formatarDataBR, type Periodo } from '../domain/datas';
 import { gastosPorLocal, ordenarMovimentos, type Posicao } from '../domain/estoque';
 import { formatarMoeda, formatarNumero } from '../domain/formato';
 import { divergenciasDeCobranca, emPrazo, posicoesDoBem, situacaoLocacao } from '../domain/bens';
-import type { Bem, Funcionario, Item, Local, Movimento, MovimentoBem, TipoMovimento } from '../domain/tipos';
+import { porPeriodo, type Bem, Funcionario, Item, Local, Movimento, MovimentoBem, TipoMovimento } from '../domain/tipos';
 
 export type TipoColuna = 'texto' | 'numero' | 'moeda';
 export interface Coluna { titulo: string; tipo: TipoColuna }
@@ -168,7 +168,7 @@ export function relatorioLocados(bens: Bem[], movs: MovimentoBem[], locais: Loca
     linhas.push({
       celulas: [
         nomeBem(b), l?.locadora ?? '', l?.contrato ?? '',
-        l?.valor !== undefined ? `${formatarMoeda(l.valor)}/${l.periodo === 'dia' ? 'dia' : 'mês'}` : '',
+        l?.valor !== undefined ? `${formatarMoeda(l.valor)}/${porPeriodo(l.periodo)}` : '',
         l?.inicio ? formatarDataBR(l.inicio) : '', l?.prevista ? formatarDataBR(l.prevista) : '', local.get(l?.localCobrancaId ?? '') ?? '', total,
         !prazo ? '' : prazo.situacao === 'vencida' ? `Vencida há ${dias(-prazo.dias)}` : prazo.situacao === 'vence' ? (prazo.dias === 0 ? 'Vence hoje' : `Vence em ${dias(prazo.dias)}`) : 'No prazo',
         fora.map((d) => `${d.quantidade} em ${local.get(d.localId) ?? '?'}`).join('; '),

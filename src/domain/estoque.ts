@@ -48,7 +48,7 @@ function acrescentar(s: SaldoItem, q: number, custo: number) {
   const deficit = s.quantidade < 0 ? Math.min(-s.quantidade, q) : 0;
   if (q - deficit > EPS) s.lotes.push({ quantidade: q - deficit, custo });
   s.quantidade += q;
-  s.ultimoCusto = custo;
+  if (custo > 0) s.ultimoCusto = custo; // entrada sem valor não apaga o último custo conhecido
   s.valor = s.lotes.reduce((t, l) => t + l.quantidade * l.custo, 0);
 }
 

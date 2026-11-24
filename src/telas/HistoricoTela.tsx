@@ -158,8 +158,8 @@ function DetalheLancamento({ estoque, grupo, itens, locais, funcionarios, posica
     if (grupo.tipo === 'epi') Object.assign(campos, { ca, tamanho, validade: validade.trim() ? analisarDataBR(validade) : '' });
     if (grupo.tipo === 'entrada') {
       const c = lerNumero(custo);
-      if (c === undefined || c < 0) throw new Error(`Informe o valor unitário${it ? ` (R$/${it.unidade})` : ''}`);
-      campos.custoUnitario = c;
+      if (c !== undefined && c < 0) throw new Error(`Valor unitário inválido${it ? ` (R$/${it.unidade})` : ''}`);
+      campos.custoUnitario = c ?? 0;
     }
     await estoque.editarMovimento(m.id, campos);
     setLinhaEditada(undefined);

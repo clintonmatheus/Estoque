@@ -4,7 +4,7 @@ import type { Estoque } from '../dados/estoque';
 import { adicionarDias, analisarDataBR, formatarDataBR } from '../domain/datas';
 import { chavePosse, divergenciasDeCobranca, emPrazo, posicoesDoBem, situacaoLocacao, totalDoBem, type PosseComQuantidade } from '../domain/bens';
 import { lerNumero, formatarMoeda } from '../domain/formato';
-import type { Bem, Funcionario, Local, MotivoSaidaBem, MovimentoBem, Posse } from '../domain/tipos';
+import { porPeriodo, type Bem, type Funcionario, Local, MotivoSaidaBem, MovimentoBem, Posse } from '../domain/tipos';
 import { Botao, Campo, Cartao, Chips, filtrar, Mensagem, Seletor } from './componentes';
 import { cores, estilos } from './estilos';
 import { EscolhaPosse, FormBem } from './FormBem';
@@ -199,7 +199,7 @@ function Detalhe({ estoque, bem, dados, hoje, onVoltar, onEditar, onAlterou }: {
         {l && (
           <>
             <Text style={estilos.subtitulo}>{`Locadora: ${l.locadora}${l.contrato ? ` · contrato ${l.contrato}` : ''}`}</Text>
-            {l.valor !== undefined && <Text style={estilos.subtitulo}>{`${formatarMoeda(l.valor)} por peça, por ${l.periodo === 'dia' ? 'dia' : 'mês'}`}</Text>}
+            {l.valor !== undefined && <Text style={estilos.subtitulo}>{`${formatarMoeda(l.valor)} por peça, por ${porPeriodo(l.periodo)}`}</Text>}
             {(l.inicio || l.prevista) && <Text style={estilos.subtitulo}>{`${l.inicio ? `Desde ${formatarDataBR(l.inicio)}` : ''}${l.inicio && l.prevista ? ' · ' : ''}${l.prevista ? `fim previsto ${formatarDataBR(l.prevista)}` : ''}`}</Text>}
             {l.localCobrancaId && <Text style={estilos.subtitulo}>{`Cobrado na obra: ${dados.locais.find((x) => x.id === l.localCobrancaId)?.nome ?? '?'}`}</Text>}
           </>

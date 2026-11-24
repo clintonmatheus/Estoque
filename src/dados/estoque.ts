@@ -331,7 +331,7 @@ export class Estoque {
   private validarCampos(m: Pick<Movimento, 'tipo' | 'data' | 'quantidade' | 'custoUnitario' | 'localId' | 'localDestinoId' | 'funcionarioId' | 'validade'>) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(m.data)) throw new Error('Data inválida');
     if (m.tipo === 'ajuste' ? m.quantidade === 0 : !(m.quantidade > 0)) throw new Error('Quantidade inválida');
-    if (m.tipo === 'entrada' && !(m.custoUnitario !== undefined && m.custoUnitario >= 0)) throw new Error('Informe o valor unitário');
+    if (m.tipo === 'entrada' && m.custoUnitario !== undefined && !(m.custoUnitario >= 0)) throw new Error('Valor unitário inválido');
     if (['saida', 'devolucao', 'transferencia'].includes(m.tipo) && !m.localId) {
       throw new Error(m.tipo === 'saida' ? 'Informe a frente de serviço de destino' : 'Informe a frente de serviço de origem');
     }
@@ -354,7 +354,7 @@ export class Estoque {
         id: this.o.novoId(), grupo, tipo: l.tipo, data: l.data, itemId: ln.itemId, quantidade: ln.quantidade, criado,
       };
       if (l.tipo === 'entrada') {
-        m.custoUnitario = ln.custoUnitario;
+        m.custoUnitario = ln.custoUnitario ?? 0; // sem valor: material antigo, só catalogado
         if (texto(l.notaFiscal)) m.notaFiscal = texto(l.notaFiscal);
         if (texto(l.fornecedor)) m.fornecedor = texto(l.fornecedor);
       }

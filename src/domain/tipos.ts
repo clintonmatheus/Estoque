@@ -93,13 +93,23 @@ export type Posse =
 
 export type MotivoSaidaBem = 'devolucao-locadora' | 'perda' | 'baixa';
 
+/** Período em que a locadora cobra o valor por peça. */
+export type PeriodoLocacao = 'dia' | 'semana' | 'quinzena' | 'mes';
+export const PERIODOS_LOCACAO: { id: PeriodoLocacao; titulo: string; por: string }[] = [
+  { id: 'dia', titulo: 'Diária', por: 'dia' },
+  { id: 'semana', titulo: 'Semanal', por: 'semana' },
+  { id: 'quinzena', titulo: 'Quinzenal', por: 'quinzena' },
+  { id: 'mes', titulo: 'Mensal', por: 'mês' },
+];
+export const porPeriodo = (p?: PeriodoLocacao) => PERIODOS_LOCACAO.find((x) => x.id === p)?.por ?? 'mês';
+
 /** Dados do contrato de locação de um equipamento locado. */
 export interface Locacao {
   locadora: string;
   contrato?: string;
   /** Valor por peça no período. */
   valor?: number;
-  periodo?: 'dia' | 'mes';
+  periodo?: PeriodoLocacao;
   inicio?: string;
   /** Data prevista para devolver o equipamento à locadora. */
   prevista?: string;
