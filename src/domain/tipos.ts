@@ -176,7 +176,7 @@ export interface Anexo {
 
 // ---------- Financeiro: cadastros (etapa 1) ----------
 
-/** ALN, Passos… Cada centro de custo pertence a uma só empresa. */
+/** ALN, Passos… A empresa paga (conta de saída e nota fiscal); o custo vai para qualquer centro de custo. */
 export interface Empresa {
   id: string;
   /** Nome curto usado nas telas e planilhas (ex.: "ALN"). */
@@ -205,11 +205,15 @@ export interface ContaBancaria {
 /** administracao: rateado entre as obras; galpao: material comprado para o estoque. */
 export type CentroEspecial = 'administracao' | 'galpao';
 
-/** Centro de custo (contrato), ex.: RMG Água, FUNPEC, SMS. As frentes de serviço ficam dentro dele. */
+/**
+ * Centro de custo (contrato), ex.: RMG Água, FUNPEC, SMS. As frentes de serviço ficam dentro dele.
+ * A administração das duas empresas é uma só: um pagamento da Passos pode entrar numa obra da ALN.
+ */
 export interface CentroCusto {
   id: string;
   nome: string;
-  empresaId: string;
+  /** Empresa do contrato (informativo; não limita quem paga). */
+  empresaId?: string;
   especial?: CentroEspecial;
   /** Outras grafias usadas nas planilhas (ex.: "RMG AGUA"). */
   apelidos: string[];

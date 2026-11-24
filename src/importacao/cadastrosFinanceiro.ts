@@ -8,7 +8,7 @@ import { linhasDaAba, normalizar, opcao, texto, type ErroImportacao } from './le
 export const ABAS_FIN = {
   empresas: { nome: 'Empresas', colunas: ['Nome curto', 'Razão social', 'CNPJ'] },
   contas: { nome: 'Contas bancárias', colunas: ['Empresa', 'Banco', 'Agência', 'Conta', 'Nome da conta'] },
-  centros: { nome: 'Centros de custo', colunas: ['Centro de custo', 'Empresa', 'Tipo', 'Outros nomes'] },
+  centros: { nome: 'Centros de custo', colunas: ['Centro de custo', 'Tipo', 'Situação', 'Empresa do contrato', 'Outros nomes'] },
   frentes: { nome: 'Frentes de serviço', colunas: ['Frente de serviço', 'Centro de custo'] },
   fornecedores: { nome: 'Fornecedores', colunas: ['Nome', 'CPF ou CNPJ', 'Chave Pix', 'Forma de pagamento', 'Dia de fechamento', 'Outros nomes', 'Observação'] },
   tipos: { nome: 'Tipos de despesa', colunas: ['Tipo de despesa', 'Outros nomes'] },
@@ -18,7 +18,7 @@ interface ComLinha { linha: number }
 export interface CadastrosFinanceiro {
   empresas: (ComLinha & { apelido: string; nome: string; cnpj?: string })[];
   contas: (ComLinha & { empresa: string; banco: string; agencia?: string; numero?: string; apelido?: string })[];
-  centros: (ComLinha & { nome: string; empresa: string; especial?: CentroEspecial; apelidos: string[] })[];
+  centros: (ComLinha & { nome: string; empresa?: string; especial?: CentroEspecial; ativo: boolean; apelidos: string[] })[];
   frentes: (ComLinha & { nome: string; centro: string })[];
   fornecedores: (ComLinha & { nome: string; documento?: string; chavePix?: string; forma: FormaPagamento; diaFechamento?: DiaSemana; apelidos: string[]; observacao?: string })[];
   tipos: (ComLinha & { nome: string; apelidos: string[] })[];
@@ -40,6 +40,7 @@ const TIPOS_CENTRO: Record<string, CentroEspecial | 'obra'> = {
   obra: 'obra', contrato: 'obra', 'obra/contrato': 'obra', administracao: 'administracao', adm: 'administracao',
   'estoque/galpao': 'galpao', galpao: 'galpao', estoque: 'galpao',
 };
+const SITUACOES: Record<string, 'ativo' | 'parado'> = { ativo: 'ativo', ativa: 'ativo', parado: 'parado', parada: 'parado', inativo: 'parado', desativado: 'parado' };
 const FORMAS: Record<string, FormaPagamento> = { pix: 'pix', boleto: 'boleto', 'fatura semanal': 'fatura', fatura: 'fatura', 'a faturar': 'fatura' };
 const DIAS = Object.fromEntries(DIAS_SEMANA.flatMap((d) => [[normalizar(d.titulo), d.id], [normalizar(d.titulo.slice(0, 3)), d.id], [`${normalizar(d.titulo)}-feira`, d.id]])) as Record<string, DiaSemana>;
 
@@ -67,9 +68,11 @@ export function lerCadastrosFinanceiro(abas: Abas): CadastrosFinanceiro {
   }), r.contas);
   cada(ABAS_FIN.centros, (v, linha) => {
     const tipo = escolha(v('Tipo'), TIPOS_CENTRO, 'Tipo', 'Obra, Administração ou Estoque/Galpão') ?? 'obra';
+    const situacao = escolha(v('Situação'), SITUACOES, 'Situação', 'Ativo ou Parado') ?? 'ativo';
+    const empresa = texto(v('Empresa do contrato'));
     return {
-      linha, nome: exigir(v('Centro de custo'), 'Informe o centro de custo'), empresa: exigir(v('Empresa'), 'Informe a empresa (cada centro de custo pertence a uma só)'),
-      ...(tipo !== 'obra' ? { especial: tipo } : {}), apelidos: lista(v('Outros nomes')),
+      linha, nome: exigir(v('Centro de custo'), 'Informe o centro de custo'), ...(empresa ? { empresa } : {}),
+      ...(tipo !== 'obra' ? { especial: tipo } : {}), ativo: situacao === 'ativo', apelidos: lista(v('Outros nomes')),
     };
   }, r.centros);
   cada(ABAS_FIN.frentes, (v, linha) => ({
@@ -135,18 +138,24 @@ export async function importarCadastrosFinanceiro(fin: Financeiro, cad: Cadastro
 
   for (const l of cad.centros) {
     await tentar(ABAS_FIN.centros.nome, l.linha, async () => {
-      const e = await empresaPor(l.empresa);
+      const e = l.empresa ? await empresaPor(l.empresa) : undefined;
       const atual = acharPorNome(await fin.centros(true), l.nome);
       if (atual) {
-        if (atual.empresaId !== e.id) throw new Error(`O centro ${atual.nome} já existe em outra empresa`);
         const apelidos = juntarApelidos(atual.nome, atual.apelidos, l.apelidos);
         if (apelidos.length !== atual.apelidos.length) await fin.salvarCentro({ ...atual, apelidos });
         r.existentes++;
         return;
       }
-      await fin.salvarCentro({ nome: l.nome, empresaId: e.id, apelidos: l.apelidos, ativo: true, ...(l.especial ? { especial: l.especial } : {}) });
+      await fin.salvarCentro({ nome: l.nome, apelidos: l.apelidos, ativo: l.ativo, ...(e ? { empresaId: e.id } : {}), ...(l.especial ? { especial: l.especial } : {}) });
       r.centros++;
     });
+  }
+
+  // Frentes do estoque cujo contrato (texto) é o nome ou outro nome de um centro: ligadas automaticamente.
+  const centrosAgora = await fin.centros(true);
+  for (const g of await fin.frentesSemCentro()) {
+    const centro = acharPorNome(centrosAgora, g.texto);
+    if (centro) r.frentesLigadas += await fin.vincularFrentes(g.texto, centro.id);
   }
 
   for (const l of cad.frentes) {

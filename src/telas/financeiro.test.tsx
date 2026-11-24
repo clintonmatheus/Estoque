@@ -16,14 +16,12 @@ describe('Financeiro na tela', () => {
     await fireEvent.press(screen.getByTestId('aba-mais'));
     await fireEvent.press(screen.getByTestId('abrir-financeiro'));
     await fireEvent.press(await screen.findByTestId('iniciais'));
-    expect(await screen.findByText('Criados: 2 empresas, 6 contas, 4 centros de custo e 19 tipos de despesa.')).toBeTruthy();
+    expect(await screen.findByText('Criados: 2 empresas, 6 contas, 2 centros de custo e 19 tipos de despesa.')).toBeTruthy();
     expect(screen.getByText('Nubank Passos')).toBeTruthy();
 
-    // Centros: o contrato do estoque "Escritórios da RMG" vira centro da ALN e as duas frentes ficam ligadas
+    // Centros: o contrato do estoque "Escritórios da RMG" vira centro e as duas frentes ficam ligadas
     await fireEvent.press(screen.getByTestId('fin-centros'));
     expect(await screen.findByText('Contrato do estoque sem centro de custo: Escritórios da RMG')).toBeTruthy();
-    const aln = (await financeiro.empresas()).find((x) => x.apelido === 'ALN')!;
-    await fireEvent.press(screen.getByTestId(`criar-empresa-Escritórios da RMG-${aln.id}`));
     await fireEvent.press(screen.getByTestId('criar-centro-Escritórios da RMG'));
     expect(await screen.findByText('2 frentes ligadas ao centro de custo.')).toBeTruthy();
     expect(screen.getByText('2 frentes: Macaíba, Riachuelo')).toBeTruthy();
@@ -61,7 +59,7 @@ describe('Financeiro na tela', () => {
     const { financeiro } = financeiroDeTeste(admin);
     const bytes = await planilha({
       Empresas: [[...ABAS_FIN.empresas.colunas], ['ALN', 'A. L. N. Serviços e Construções Ltda.']],
-      'Centros de custo': [[...ABAS_FIN.centros.colunas], ['RMG ÁGUA', 'ALN', 'Obra', 'CAIXA RMG'], ['SMS', 'XYZ']],
+      'Centros de custo': [[...ABAS_FIN.centros.colunas], ['RMG ÁGUA', 'Obra', 'Ativo', 'ALN', 'CAIXA RMG'], ['SMS', 'Obra', 'Ativo', 'XYZ']],
     });
     let arquivo = bytes;
     await render(<Raiz {...base} usuario={admin} financeiro={financeiro} carregarSaldos={async () => []} escolherPlanilha={async () => arquivo} />);
@@ -71,7 +69,7 @@ describe('Financeiro na tela', () => {
     expect(screen.queryByTestId('confirmar-importacao-fin')).toBeNull();
     arquivo = await planilha({
       Empresas: [[...ABAS_FIN.empresas.colunas], ['ALN', 'A. L. N. Serviços e Construções Ltda.']],
-      'Centros de custo': [[...ABAS_FIN.centros.colunas], ['RMG ÁGUA', 'ALN', 'Obra', 'CAIXA RMG'], ['SMS', 'ALN']],
+      'Centros de custo': [[...ABAS_FIN.centros.colunas], ['RMG ÁGUA', 'Obra', 'Ativo', 'ALN', 'CAIXA RMG'], ['SMS']],
     });
     await fireEvent.press(screen.getByTestId('escolher-planilha-fin'));
     expect(await screen.findByText('• 2 centro(s) de custo')).toBeTruthy();

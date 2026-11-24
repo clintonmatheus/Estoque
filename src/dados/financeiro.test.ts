@@ -35,12 +35,21 @@ describe('Financeiro — cadastros', () => {
     await expect(financeiro.salvarConta({ empresaId: 'nada', banco: 'Inter', ativo: true })).rejects.toThrow('Escolha a empresa');
   });
 
+  it('centro de custo: empresa opcional; administração e galpão são um só', async () => {
+    const { financeiro, aln } = await comEmpresa();
+    const funpec = await financeiro.salvarCentro({ nome: 'FUNPEC', ativo: true });
+    expect(funpec.empresaId).toBeUndefined();
+    await expect(financeiro.salvarCentro({ nome: 'X', empresaId: 'nada', ativo: true })).rejects.toThrow('Escolha a empresa');
+    await financeiro.salvarCentro({ nome: 'Administração', especial: 'administracao', ativo: true });
+    await expect(financeiro.salvarCentro({ nome: 'Adm Passos', empresaId: aln.id, especial: 'administracao', ativo: true }))
+      .rejects.toThrow('Já existe o centro Administração: a administração é um só para as duas empresas');
+  });
+
   it('centro de custo: nome e outros nomes não se repetem entre centros', async () => {
     const { financeiro, aln } = await comEmpresa();
     const rmg = await financeiro.salvarCentro({ nome: 'RMG Água', empresaId: aln.id, apelidos: ['RMG AGUA', 'rmg água', 'Caixa RMG'], ativo: true });
     expect(rmg.apelidos).toEqual(['Caixa RMG']);
     await expect(financeiro.salvarCentro({ nome: 'caixa rmg', empresaId: aln.id, ativo: true })).rejects.toThrow('já é usado pelo centro de custo RMG Água');
-    await expect(financeiro.salvarCentro({ nome: 'FUNPEC', empresaId: '', ativo: true })).rejects.toThrow('Escolha a empresa');
   });
 
   it('liga as frentes do estoque ao centro e acompanha a mudança de nome', async () => {
@@ -86,14 +95,15 @@ describe('Financeiro — cadastros', () => {
     expect(loja.diaFechamento).toBe('sexta');
   });
 
-  it('cadastros iniciais: ALN e Passos, contas, Administração e Galpão, tipos; repetir não duplica', async () => {
+  it('cadastros iniciais: ALN e Passos, contas, Administração e Galpão (um de cada), tipos; repetir não duplica', async () => {
     const { financeiro, armazenamento } = financeiroDeTeste();
-    expect(await financeiro.criarCadastrosIniciais()).toEqual({ empresas: 2, contas: 6, centros: 4, tipos: 19 });
+    expect(await financeiro.criarCadastrosIniciais()).toEqual({ empresas: 2, contas: 6, centros: 2, tipos: 19 });
     expect((await financeiro.contas()).map((c) => c.apelido)).toEqual(['BB ALN', 'BB Passos', 'Inter ALN', 'Inter Passos', 'Itaú Passos', 'Nubank Passos']);
     expect((await financeiro.centros()).map((c) => `${c.nome}:${c.especial}`)).toEqual([
-      'Administração ALN:administracao', 'Administração Passos:administracao', 'Estoque/Galpão ALN:galpao', 'Estoque/Galpão Passos:galpao',
+      'Administração:administracao', 'Estoque/Galpão:galpao',
     ]);
+    expect((await financeiro.centros()).every((c) => c.empresaId === undefined)).toBe(true);
     expect(await financeiro.criarCadastrosIniciais()).toEqual({ empresas: 0, contas: 0, centros: 0, tipos: 0 });
-    expect((await armazenamento.fila.listar()).length).toBe(2 + 6 + 4 + 19);
+    expect((await armazenamento.fila.listar()).length).toBe(2 + 6 + 2 + 19);
   });
 });

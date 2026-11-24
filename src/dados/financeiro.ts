@@ -122,13 +122,17 @@ export class Financeiro {
     this.exigirAdmin();
     const nome = texto(n.nome);
     if (!nome) throw new Error('Informe o nome do centro de custo');
-    await this.empresaAtiva(n.empresaId);
+    if (n.empresaId) await this.empresaAtiva(n.empresaId);
     const apelidos = juntarApelidos(nome, n.apelidos);
-    const outro = this.conflito(await this.a.centros.listar(), n.id, [nome, ...apelidos]);
+    const lista = await this.a.centros.listar();
+    const outro = this.conflito(lista, n.id, [nome, ...apelidos]);
     if (outro) throw new Error(`Esse nome já é usado pelo centro de custo ${outro.nome}`);
+    const mesmoTipo = n.especial && lista.find((c) => c.id !== n.id && c.especial === n.especial);
+    if (mesmoTipo) throw new Error(`Já existe o centro ${mesmoTipo.nome}: a ${n.especial === 'administracao' ? 'administração' : 'estoque do galpão'} é um só para as duas empresas`);
     const atual = n.id ? await this.a.centros.obter(n.id) : undefined;
     const c: CentroCusto = { ...n, id: n.id ?? this.o.novoId(), nome, apelidos, ...this.carimbo(atual) };
     if (!c.especial) delete c.especial;
+    if (!c.empresaId) delete c.empresaId;
     await this.gravar('centros', c);
     // O estoque mostra o nome do contrato em cada frente: acompanha a mudança de nome.
     if (atual && atual.nome !== nome) {
@@ -210,7 +214,7 @@ export class Financeiro {
     return t;
   }
 
-  /** Cria o que ainda não existe: ALN e Passos com as contas informadas, Administração e Estoque/Galpão de cada uma, e os tipos de despesa. */
+  /** Cria o que ainda não existe: ALN e Passos com as contas informadas, os centros Administração e Estoque/Galpão (um de cada) e os tipos de despesa. */
   async criarCadastrosIniciais(): Promise<{ empresas: number; contas: number; centros: number; tipos: number }> {
     this.exigirAdmin();
     const r = { empresas: 0, contas: 0, centros: 0, tipos: 0 };
@@ -223,12 +227,13 @@ export class Financeiro {
         await this.salvarConta({ empresaId: e.id, banco, ativo: true });
         r.contas++;
       }
-      const centros = await this.a.centros.listar();
-      for (const [especial, nome] of [['administracao', `Administração ${ini.apelido}`], ['galpao', `Estoque/Galpão ${ini.apelido}`]] as const) {
-        if (centros.some((c) => c.empresaId === e!.id && c.especial === especial)) continue;
-        await this.salvarCentro({ nome, empresaId: e.id, especial, ativo: true });
-        r.centros++;
-      }
+    }
+    // Administração e galpão: um de cada, para as duas empresas.
+    const centros = await this.a.centros.listar();
+    for (const [especial, nome, apelidos] of [['administracao', 'Administração', ['ADM']], ['galpao', 'Estoque/Galpão', ['Galpão', 'Estoque']]] as const) {
+      if (centros.some((c) => c.especial === especial)) continue;
+      await this.salvarCentro({ nome, especial, apelidos: [...apelidos], ativo: true });
+      r.centros++;
     }
     const tipos = await this.a.tipos_despesa.listar();
     for (const t of TIPOS_DESPESA_INICIAIS) {

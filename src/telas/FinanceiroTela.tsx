@@ -138,20 +138,23 @@ export function FinanceiroTela({ financeiro, versao = 0, onAlterou, abaInicial =
     return (
       <ScrollView contentContainerStyle={estilos.conteudo} keyboardShouldPersistTaps="handled">
         {cabecalho}
-        {pode && d.semCentro.map((g) => <LigarFrentes key={g.texto} financeiro={financeiro} grupo={g} centros={d.centros.filter((c) => c.ativo)} empresas={d.empresas.filter((e) => e.ativo)} onFim={atualizar} />)}
+        {pode && d.semCentro.map((g) => <LigarFrentes key={g.texto} financeiro={financeiro} grupo={g} centros={d.centros.filter((c) => c.ativo)} onFim={atualizar} />)}
         {pode && <Botao testID="novo-centro" titulo="+ Novo centro de custo" onPress={() => setEdicao({ tipo: 'centro' })} />}
-        {d.empresas.map((e) => {
-          const centros = d.centros.filter((c) => c.empresaId === e.id);
+        {([['Obras e contratos', (c: CentroCusto) => !c.especial && c.ativo], ['Administração e galpão', (c: CentroCusto) => !!c.especial && c.ativo],
+          ['Parados (desativados)', (c: CentroCusto) => !c.ativo]] as const).map(([titulo, filtro]) => {
+          const centros = d.centros.filter(filtro);
           if (!centros.length) return null;
           return (
-            <View key={e.id} style={{ gap: 8 }}>
-              <Text style={estilos.secao}>{e.apelido}</Text>
+            <View key={titulo} style={{ gap: 8 }}>
+              <Text style={estilos.secao}>{titulo}</Text>
               {centros.map((c) => {
                 const frentes = d.frentes.filter((f) => f.centroId === c.id && f.ativo);
+                const emp = c.empresaId ? empresa(c.empresaId) : undefined;
                 return (
-                  <Pressable key={c.id} testID={`centro-${c.id}`} onPress={() => setEdicao({ tipo: 'centro', id: c.id })} style={[estilos.card, !c.ativo && { opacity: 0.5 }]}>
+                  <Pressable key={c.id} testID={`centro-${c.id}`} onPress={() => setEdicao({ tipo: 'centro', id: c.id })} style={[estilos.card, !c.ativo && { opacity: 0.6 }]}>
                     <Text style={estilos.titulo}>{c.nome}</Text>
                     {c.especial && <Text style={estilos.etiqueta}>{NOME_ESPECIAL[c.especial]}</Text>}
+                    {emp && <Text style={estilos.subtitulo}>{`Contrato da ${emp.apelido}`}</Text>}
                     <Text style={estilos.subtitulo}>{frentes.length ? `${frentes.length} ${frentes.length === 1 ? 'frente' : 'frentes'}: ${frentes.map((f) => f.nome).join(', ')}` : 'Sem frentes'}</Text>
                     {c.apelidos.length > 0 && <Text style={estilos.subtitulo}>{`Outros nomes: ${c.apelidos.join('; ')}`}</Text>}
                   </Pressable>
@@ -201,11 +204,10 @@ export function FinanceiroTela({ financeiro, versao = 0, onAlterou, abaInicial =
 }
 
 /** Frentes do estoque cadastradas com um contrato que ainda não é centro de custo. */
-function LigarFrentes({ financeiro, grupo, centros, empresas, onFim }: {
-  financeiro: Financeiro; grupo: FrentesSemCentro; centros: CentroCusto[]; empresas: Empresa[]; onFim: (ok?: string) => void;
+function LigarFrentes({ financeiro, grupo, centros, onFim }: {
+  financeiro: Financeiro; grupo: FrentesSemCentro; centros: CentroCusto[]; onFim: (ok?: string) => void;
 }) {
   const [centroId, setCentroId] = useState<string>();
-  const [empresaId, setEmpresaId] = useState<string>();
   const [erro, setErro] = useState<string>();
   async function ligar(id: string) {
     const n = await financeiro.vincularFrentes(grupo.texto, id);
@@ -214,7 +216,7 @@ function LigarFrentes({ financeiro, grupo, centros, empresas, onFim }: {
   async function criar() {
     setErro(undefined);
     try {
-      const c = await financeiro.salvarCentro({ nome: grupo.texto, empresaId: empresaId ?? '', ativo: true });
+      const c = await financeiro.salvarCentro({ nome: grupo.texto, ativo: true });
       await ligar(c.id);
     } catch (e) { setErro((e as Error).message); }
   }
@@ -229,9 +231,7 @@ function LigarFrentes({ financeiro, grupo, centros, empresas, onFim }: {
           {centroId && <Botao testID={`confirmar-ligar-${grupo.texto}`} titulo="Ligar" onPress={() => void ligar(centroId)} />}
         </>
       )}
-      <Text style={estilos.rotulo}>{`Ou criar o centro "${grupo.texto}" na empresa:`}</Text>
-      <Chips prefixo={`criar-empresa-${grupo.texto}`} valor={empresaId ?? ''} onMudar={setEmpresaId} opcoes={empresas.map((e) => ({ id: e.id, titulo: e.apelido }))} />
-      {empresaId && <Botao testID={`criar-centro-${grupo.texto}`} titulo="Criar e ligar" secundario onPress={() => void criar()} />}
+      <Botao testID={`criar-centro-${grupo.texto}`} titulo={`Criar o centro "${grupo.texto}" e ligar`} secundario onPress={() => void criar()} />
       <Mensagem erro={erro} />
     </Cartao>
   );
@@ -313,12 +313,12 @@ function FormCentro({ financeiro, centro, empresas, frentes, onFrente, onFim, on
 }) {
   const pode = financeiro.podeEditar;
   const [nome, setNome] = useState(centro?.nome ?? '');
-  const [empresaId, setEmpresaId] = useState(centro?.empresaId ?? (empresas.length === 1 ? empresas[0].id : ''));
+  const [empresaId, setEmpresaId] = useState(centro?.empresaId ?? '');
   const [especial, setEspecial] = useState<CentroEspecial | 'obra'>(centro?.especial ?? 'obra');
   const [apelidos, setApelidos] = useState((centro?.apelidos ?? []).join('; '));
   const [ativo, setAtivo] = useState(centro?.ativo ?? true);
   const { erro, salvar } = useSalvar(() => financeiro.salvarCentro({
-    id: centro?.id, nome, empresaId, apelidos: lerLista(apelidos), ativo, ...(especial !== 'obra' ? { especial } : {}),
+    id: centro?.id, nome, apelidos: lerLista(apelidos), ativo, ...(empresaId ? { empresaId } : {}), ...(especial !== 'obra' ? { especial } : {}),
   }), onFim);
   return (
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={estilos.conteudo}>
@@ -327,14 +327,15 @@ function FormCentro({ financeiro, centro, empresas, frentes, onFrente, onFim, on
         {pode && (
           <>
             <Campo testID="nome" rotulo="Nome" value={nome} onChangeText={setNome} placeholder="Ex.: RMG Água" />
-            <Text style={estilos.rotulo}>Empresa</Text>
-            <Chips prefixo="empresa" valor={empresaId} onMudar={setEmpresaId} opcoes={empresas.map((e) => ({ id: e.id, titulo: e.apelido }))} />
+            <Text style={estilos.rotulo}>Empresa do contrato (opcional; qualquer empresa pode pagar custos deste centro)</Text>
+            <Chips prefixo="empresa" valor={empresaId} onMudar={setEmpresaId} opcoes={[{ id: '', titulo: 'Não informar' }, ...empresas.map((e) => ({ id: e.id, titulo: e.apelido }))]} />
             <Text style={estilos.rotulo}>Tipo</Text>
             <Chips prefixo="especial" valor={especial} onMudar={setEspecial} opcoes={[
               { id: 'obra', titulo: 'Obra/contrato' }, { id: 'administracao', titulo: 'Administração' }, { id: 'galpao', titulo: 'Estoque/Galpão' },
             ]} />
             <Campo testID="apelidos" rotulo="Outros nomes usados nas planilhas (separe com ;)" value={apelidos} onChangeText={setApelidos} placeholder="Ex.: RMG AGUA; CAIXA RMG" multiline />
             <Ativo valor={ativo} onMudar={setAtivo} />
+            {!ativo && <Text style={estilos.subtitulo}>Desativado = parado. Continua nos relatórios antigos e pode voltar a qualquer momento.</Text>}
             <Rodape erro={erro} onSalvar={salvar} onVoltar={onVoltar} />
           </>
         )}
