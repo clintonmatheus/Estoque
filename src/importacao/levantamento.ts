@@ -32,9 +32,9 @@ export interface Levantamento {
 /** Compara nomes sem diferença de maiúsculas, acentos e espaços extras. */
 export const normalizar = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 
-const texto = (c: Celula) => (c === undefined ? undefined : String(c).trim() || undefined);
+export const texto = (c: Celula) => (c === undefined ? undefined : String(c).trim() || undefined);
 
-function numero(c: Celula): number | undefined {
+export function numero(c: Celula): number | undefined {
   if (c === undefined) return undefined;
   if (typeof c === 'number') return c;
   let t = String(c).trim().replace(/^R\$\s*/, '').replace(/\s/g, '');
@@ -45,7 +45,7 @@ function numero(c: Celula): number | undefined {
 }
 
 /** Lê as linhas de uma aba pelos cabeçalhos (a ordem das colunas pode mudar). */
-function linhasDaAba(abas: Abas, aba: { nome: string; colunas: readonly string[] }, erros: ErroImportacao[]) {
+export function linhasDaAba(abas: Abas, aba: { nome: string; colunas: readonly string[] }, erros: ErroImportacao[]) {
   const chave = Object.keys(abas).find((k) => normalizar(k) === normalizar(aba.nome));
   if (!chave) return [];
   const linhas = abas[chave];
@@ -69,7 +69,7 @@ const PERIODOS_ACEITOS: Record<string, PeriodoLocacao> = {
   quinzena: 'quinzena', quinzenal: 'quinzena', mes: 'mes', mensal: 'mes',
 };
 
-function opcao<T extends string>(c: Celula, valores: Record<string, T>, campo: string): T | undefined {
+export function opcao<T extends string>(c: Celula, valores: Record<string, T>, campo: string): T | undefined {
   const t = texto(c);
   if (!t) return undefined;
   const v = valores[normalizar(t)];

@@ -1,6 +1,7 @@
-import type { Anexo, Bem, Funcionario, Item, Local, Movimento, MovimentoBem } from '../domain/tipos';
+import type { Anexo, Bem, CentroCusto, ContaBancaria, Empresa, Fornecedor, Funcionario, Item, Local, Movimento, MovimentoBem, TipoDespesa } from '../domain/tipos';
 
-export const TABELAS = ['itens', 'locais', 'funcionarios', 'movimentos', 'anexos', 'bens', 'movimentos_bens'] as const;
+export const TABELAS = ['itens', 'locais', 'funcionarios', 'movimentos', 'anexos', 'bens', 'movimentos_bens',
+  'empresas', 'contas', 'centros', 'fornecedores', 'tipos_despesa'] as const;
 export type Tabela = (typeof TABELAS)[number];
 
 export interface Documentos {
@@ -11,6 +12,11 @@ export interface Documentos {
   anexos: Anexo;
   bens: Bem;
   movimentos_bens: MovimentoBem;
+  empresas: Empresa;
+  contas: ContaBancaria;
+  centros: CentroCusto;
+  fornecedores: Fornecedor;
+  tipos_despesa: TipoDespesa;
 }
 
 /** Coleção de documentos com `id` (todos guardados por completo). */

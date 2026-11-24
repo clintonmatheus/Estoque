@@ -1,6 +1,14 @@
 export type Papel = 'admin' | 'almoxarife' | 'consultor';
 
-export interface Usuario { id: string; nome: string; papel: Papel }
+/** Perfil no módulo financeiro, independente do papel no galpão. */
+export type PapelFinanceiro = 'admin' | 'pagador' | 'solicitante';
+
+export interface Usuario { id: string; nome: string; papel: Papel; financeiro?: PapelFinanceiro }
+
+export const temFinanceiro = (u: Usuario) => !!u.financeiro;
+export const ehAdminFinanceiro = (u: Usuario) => u.financeiro === 'admin';
+/** Quem grava no aparelho e sincroniza (lança no galpão ou usa o financeiro). */
+export const usaSincronizacao = (u: Usuario) => podeLancar(u) || temFinanceiro(u);
 
 /** Administrador e almoxarife lançam movimentos e veem valores; consultor só vê saldos. */
 export const podeLancar = (u: Usuario) => u.papel === 'admin' || u.papel === 'almoxarife';
@@ -36,8 +44,10 @@ export interface Local {
   id: string;
   /** Frente de serviço (ex.: "Riachuelo"). */
   nome: string;
-  /** Contrato ao qual a frente pertence (ex.: "Escritórios da RMG"). */
+  /** Contrato ao qual a frente pertence (ex.: "Escritórios da RMG"). Nome do centro de custo vinculado, quando houver. */
   centroCusto: string;
+  /** Centro de custo do financeiro ao qual a frente pertence. */
+  centroId?: string;
   ativo: boolean;
   criado: Autoria;
   alterado?: Autoria;
@@ -163,3 +173,83 @@ export interface Anexo {
   excluido?: boolean;
 }
 
+
+// ---------- Financeiro: cadastros (etapa 1) ----------
+
+/** ALN, Passos… Cada centro de custo pertence a uma só empresa. */
+export interface Empresa {
+  id: string;
+  /** Nome curto usado nas telas e planilhas (ex.: "ALN"). */
+  apelido: string;
+  /** Razão social. */
+  nome: string;
+  cnpj?: string;
+  ativo: boolean;
+  criado: Autoria;
+  alterado?: Autoria;
+}
+
+export interface ContaBancaria {
+  id: string;
+  empresaId: string;
+  banco: string;
+  agencia?: string;
+  numero?: string;
+  /** Ex.: "BB ALN", "Inter Passos". */
+  apelido: string;
+  ativo: boolean;
+  criado: Autoria;
+  alterado?: Autoria;
+}
+
+/** administracao: rateado entre as obras; galpao: material comprado para o estoque. */
+export type CentroEspecial = 'administracao' | 'galpao';
+
+/** Centro de custo (contrato), ex.: RMG Água, FUNPEC, SMS. As frentes de serviço ficam dentro dele. */
+export interface CentroCusto {
+  id: string;
+  nome: string;
+  empresaId: string;
+  especial?: CentroEspecial;
+  /** Outras grafias usadas nas planilhas (ex.: "RMG AGUA"). */
+  apelidos: string[];
+  ativo: boolean;
+  criado: Autoria;
+  alterado?: Autoria;
+}
+
+export type FormaPagamento = 'pix' | 'boleto' | 'fatura';
+export const FORMAS_PAGAMENTO: { id: FormaPagamento; titulo: string }[] = [
+  { id: 'pix', titulo: 'Pix' }, { id: 'boleto', titulo: 'Boleto' }, { id: 'fatura', titulo: 'Fatura semanal' },
+];
+
+export type DiaSemana = 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta' | 'sabado' | 'domingo';
+export const DIAS_SEMANA: { id: DiaSemana; titulo: string }[] = [
+  { id: 'segunda', titulo: 'Segunda' }, { id: 'terca', titulo: 'Terça' }, { id: 'quarta', titulo: 'Quarta' }, { id: 'quinta', titulo: 'Quinta' },
+  { id: 'sexta', titulo: 'Sexta' }, { id: 'sabado', titulo: 'Sábado' }, { id: 'domingo', titulo: 'Domingo' },
+];
+
+export interface Fornecedor {
+  id: string;
+  nome: string;
+  /** CPF ou CNPJ, só números. */
+  documento?: string;
+  chavePix?: string;
+  forma: FormaPagamento;
+  /** Dia em que a loja fecha a fatura semanal. */
+  diaFechamento?: DiaSemana;
+  observacao?: string;
+  apelidos: string[];
+  ativo: boolean;
+  criado: Autoria;
+  alterado?: Autoria;
+}
+
+export interface TipoDespesa {
+  id: string;
+  nome: string;
+  apelidos: string[];
+  ativo: boolean;
+  criado: Autoria;
+  alterado?: Autoria;
+}

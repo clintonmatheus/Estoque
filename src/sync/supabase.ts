@@ -1,7 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import { AppState, Platform } from 'react-native';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Anexo, Papel, Usuario } from '../domain/tipos';
+import type { Anexo, Papel, PapelFinanceiro, Usuario } from '../domain/tipos';
 import type { Autenticacao, SaldoSimples } from '../auth/autenticacao';
 import { SUPABASE_CHAVE_PUBLICA, SUPABASE_URL } from '../config';
 import { TABELAS, type Documentos, type Tabela } from '../storage/contrato';
@@ -136,9 +136,11 @@ export class AutenticacaoSupabase implements Autenticacao {
   }
 
   private async carregarPerfil(id: string): Promise<Usuario> {
-    const { data, error } = await this.sb.from('perfis').select('id, nome, papel').eq('id', id).single();
+    // '*': a coluna "financeiro" só existe depois do 006; antes disso o app continua funcionando sem ela.
+    const { data, error } = await this.sb.from('perfis').select('*').eq('id', id).single();
     if (error || !data) throw erroDeRede(error);
     const u: Usuario = { id: data.id, nome: data.nome, papel: data.papel as Papel };
+    if (data.financeiro) u.financeiro = data.financeiro as PapelFinanceiro;
     localStorage.setItem(CHAVE_PERFIL, JSON.stringify(u));
     return u;
   }

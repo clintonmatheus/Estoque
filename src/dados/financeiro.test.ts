@@ -1,0 +1,99 @@
+import { CLINTON_FIN, estoqueComCadastros, financeiroDeTeste, MARILIA, PAGADORA } from '../testes/fabricas';
+import { Financeiro } from './financeiro';
+
+async function comEmpresa() {
+  const t = financeiroDeTeste();
+  const aln = await t.financeiro.salvarEmpresa({ apelido: ' ALN ', nome: 'A. L. N. Serviços e Construções Ltda.', ativo: true });
+  return { ...t, aln };
+}
+
+describe('Financeiro — cadastros', () => {
+  it('só o administrador do financeiro altera; pagador e almoxarife não', async () => {
+    const { armazenamento } = financeiroDeTeste();
+    for (const u of [PAGADORA, MARILIA]) {
+      const f = new Financeiro(armazenamento, u, { agora: () => '2026-11-24T12:00:00.000Z', novoId: () => 'x' });
+      expect(f.podeEditar).toBe(false);
+      await expect(f.salvarEmpresa({ apelido: 'ALN', nome: 'ALN', ativo: true })).rejects.toThrow('Sem permissão');
+    }
+    expect(await armazenamento.fila.listar()).toEqual([]);
+  });
+
+  it('empresa: nome curto único e CNPJ conferido', async () => {
+    const { financeiro, aln } = await comEmpresa();
+    expect(aln.apelido).toBe('ALN');
+    await expect(financeiro.salvarEmpresa({ apelido: 'aln', nome: 'Outra', ativo: true })).rejects.toThrow('Já existe a empresa aln');
+    await expect(financeiro.salvarEmpresa({ apelido: 'Passos', nome: 'Construtora Passos', cnpj: '11.111.111/1111-11', ativo: true })).rejects.toThrow('CPF/CNPJ inválido');
+    const p = await financeiro.salvarEmpresa({ apelido: 'Passos', nome: 'Construtora Passos', cnpj: '05.948.553/0002-75', ativo: true });
+    expect(p.cnpj).toBe('05948553000275');
+  });
+
+  it('conta: apelido automático e único', async () => {
+    const { financeiro, aln } = await comEmpresa();
+    const c = await financeiro.salvarConta({ empresaId: aln.id, banco: 'Banco do Brasil', agencia: ' 1234 ', ativo: true });
+    expect(c).toMatchObject({ apelido: 'BB ALN', agencia: '1234' });
+    await expect(financeiro.salvarConta({ empresaId: aln.id, banco: 'Banco do Brasil', ativo: true })).rejects.toThrow('Já existe a conta BB ALN');
+    await expect(financeiro.salvarConta({ empresaId: 'nada', banco: 'Inter', ativo: true })).rejects.toThrow('Escolha a empresa');
+  });
+
+  it('centro de custo: nome e outros nomes não se repetem entre centros', async () => {
+    const { financeiro, aln } = await comEmpresa();
+    const rmg = await financeiro.salvarCentro({ nome: 'RMG Água', empresaId: aln.id, apelidos: ['RMG AGUA', 'rmg água', 'Caixa RMG'], ativo: true });
+    expect(rmg.apelidos).toEqual(['Caixa RMG']);
+    await expect(financeiro.salvarCentro({ nome: 'caixa rmg', empresaId: aln.id, ativo: true })).rejects.toThrow('já é usado pelo centro de custo RMG Água');
+    await expect(financeiro.salvarCentro({ nome: 'FUNPEC', empresaId: '', ativo: true })).rejects.toThrow('Escolha a empresa');
+  });
+
+  it('liga as frentes do estoque ao centro e acompanha a mudança de nome', async () => {
+    const e = await estoqueComCadastros();
+    const { financeiro } = financeiroDeTeste(CLINTON_FIN, e.armazenamento);
+    const aln = await financeiro.salvarEmpresa({ apelido: 'ALN', nome: 'ALN', ativo: true });
+    expect((await financeiro.frentesSemCentro()).map((g) => [g.texto, g.frentes.length])).toEqual([['Escritórios da RMG', 2]]);
+    const centro = await financeiro.salvarCentro({ nome: 'Escritórios RMG', empresaId: aln.id, ativo: true });
+    expect(await financeiro.vincularFrentes('Escritórios da RMG', centro.id)).toBe(2);
+    expect(await financeiro.frentesSemCentro()).toEqual([]);
+    const ligado = (await financeiro.centros())[0];
+    expect(ligado.apelidos).toEqual(['Escritórios da RMG']);
+    const riachuelo = (await e.estoque.locais()).find((l) => l.nome === 'Riachuelo')!;
+    expect(riachuelo).toMatchObject({ centroId: centro.id, centroCusto: 'Escritórios RMG' });
+
+    await financeiro.salvarCentro({ ...ligado, nome: 'RMG Escritórios' });
+    expect((await e.estoque.locais()).every((l) => l.centroCusto === 'RMG Escritórios')).toBe(true);
+
+    // No estoque, editar só o nome da frente mantém a ligação; trocar o contrato desfaz.
+    const r1 = await e.estoque.salvarLocal({ id: riachuelo.id, nome: 'Riachuelo II', centroCusto: 'RMG Escritórios', ativo: true });
+    expect(r1.centroId).toBe(centro.id);
+    const r2 = await e.estoque.salvarLocal({ id: riachuelo.id, nome: 'Riachuelo II', centroCusto: 'Outro contrato', ativo: true });
+    expect(r2.centroId).toBeUndefined();
+  });
+
+  it('frente nova dentro do centro, sem repetir nome no mesmo centro', async () => {
+    const { financeiro, aln } = await comEmpresa();
+    const rmg = await financeiro.salvarCentro({ nome: 'RMG Água', empresaId: aln.id, ativo: true });
+    const f = await financeiro.salvarFrente({ nome: 'RMG Pureza', centroId: rmg.id, ativo: true });
+    expect(f).toMatchObject({ centroCusto: 'RMG Água', centroId: rmg.id });
+    await expect(financeiro.salvarFrente({ nome: 'rmg pureza', centroId: rmg.id, ativo: true })).rejects.toThrow('Já existe a frente RMG Pureza');
+  });
+
+  it('fornecedor: documento, chave Pix e dia de fechamento só na fatura', async () => {
+    const { financeiro } = financeiroDeTeste();
+    await expect(financeiro.salvarFornecedor({ nome: 'Aço Potiguar', forma: 'pix', ativo: true })).rejects.toThrow('Informe a chave Pix');
+    const aco = await financeiro.salvarFornecedor({ nome: 'Aço Potiguar', documento: '05.948.553/0002-75', chavePix: '05948553000275', forma: 'pix', diaFechamento: 'sexta', ativo: true });
+    expect(aco).toMatchObject({ documento: '05948553000275', chavePix: '05948553000275' });
+    expect(aco.diaFechamento).toBeUndefined();
+    await expect(financeiro.salvarFornecedor({ nome: 'Outro nome', documento: '05948553000275', forma: 'boleto', ativo: true })).rejects.toThrow('já está no fornecedor Aço Potiguar');
+    await expect(financeiro.salvarFornecedor({ nome: 'aço potiguar', forma: 'boleto', ativo: true })).rejects.toThrow('Já existe o fornecedor Aço Potiguar');
+    const loja = await financeiro.salvarFornecedor({ nome: 'Casa do Construtor', forma: 'fatura', diaFechamento: 'sexta', ativo: true });
+    expect(loja.diaFechamento).toBe('sexta');
+  });
+
+  it('cadastros iniciais: ALN e Passos, contas, Administração e Galpão, tipos; repetir não duplica', async () => {
+    const { financeiro, armazenamento } = financeiroDeTeste();
+    expect(await financeiro.criarCadastrosIniciais()).toEqual({ empresas: 2, contas: 6, centros: 4, tipos: 19 });
+    expect((await financeiro.contas()).map((c) => c.apelido)).toEqual(['BB ALN', 'BB Passos', 'Inter ALN', 'Inter Passos', 'Itaú Passos', 'Nubank Passos']);
+    expect((await financeiro.centros()).map((c) => `${c.nome}:${c.especial}`)).toEqual([
+      'Administração ALN:administracao', 'Administração Passos:administracao', 'Estoque/Galpão ALN:galpao', 'Estoque/Galpão Passos:galpao',
+    ]);
+    expect(await financeiro.criarCadastrosIniciais()).toEqual({ empresas: 0, contas: 0, centros: 0, tipos: 0 });
+    expect((await armazenamento.fila.listar()).length).toBe(2 + 6 + 4 + 19);
+  });
+});

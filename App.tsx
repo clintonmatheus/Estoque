@@ -4,7 +4,8 @@ import { ActivityIndicator, AppState, KeyboardAvoidingView, View } from 'react-n
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Estoque } from './src/dados/estoque';
 import { dataLocal } from './src/domain/datas';
-import { podeLancar, type Usuario } from './src/domain/tipos';
+import { usaSincronizacao, type Usuario } from './src/domain/tipos';
+import { Financeiro } from './src/dados/financeiro';
 import { novoId } from './src/fotos/id';
 import { servicoFotosDoApp } from './src/fotos/servico';
 import { escolherPlanilha } from './src/importacao/escolher';
@@ -51,16 +52,16 @@ function AppReal() {
       // O papel guardado pode estar desatualizado (ex.: alterado pelo administrador).
       if (atual) {
         const novo = await auth.atualizarPerfil();
-        if (novo && (novo.papel !== atual.papel || novo.nome !== atual.nome)) setUsuario(novo);
+        if (novo && (novo.papel !== atual.papel || novo.nome !== atual.nome || novo.financeiro !== atual.financeiro)) setUsuario(novo);
       }
     })();
   }, []);
 
   const motor = useMemo(() => {
-    if (!armazenamento || !usuario || !podeLancar(usuario)) return undefined;
+    if (!armazenamento || !usuario || !usaSincronizacao(usuario)) return undefined;
     const agendador = new AgendadorSync(new Sincronizador(armazenamento, remoto), { atrasoMs: 1500, intervaloMs: 60_000, agora });
-    const estoque = new Estoque(armazenamento, usuario, { agora, novoId, aoAlterar: () => agendador.agendar() });
-    return { estoque, agendador };
+    const opcoes = { agora, novoId, aoAlterar: () => agendador.agendar() };
+    return { estoque: new Estoque(armazenamento, usuario, opcoes), financeiro: new Financeiro(armazenamento, usuario, opcoes), agendador };
   }, [armazenamento, usuario]);
 
   useEffect(() => {
@@ -91,7 +92,7 @@ function AppReal() {
   else if (!usuario) conteudo = <LoginTela entrar={(e, s) => auth.entrar(e, s)} onEntrou={setUsuario} />;
   else {
     conteudo = (
-      <Raiz usuario={usuario} estoque={motor?.estoque} carregarSaldos={() => remoto.saldos()} servicoFotos={servicoFotosDoApp} escolherPlanilha={escolherPlanilha}
+      <Raiz usuario={usuario} estoque={motor?.estoque} financeiro={motor?.financeiro} carregarSaldos={() => remoto.saldos()} servicoFotos={servicoFotosDoApp} escolherPlanilha={escolherPlanilha}
         saida={saida} hoje={dataLocal(agora())} agora={agora} versao={versao} estadoSync={estado}
         onSincronizar={motor ? () => void motor.agendador.agora() : undefined} onSair={sair} />
     );

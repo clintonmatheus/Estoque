@@ -25,6 +25,8 @@ saídas para as frentes de serviço, devoluções, transferências, inventário 
 
 **Atualização (categorias):** quem já rodou o `001`, rode também `supabase/003_categorias.sql` (uma vez).
 
+**Atualização (Financeiro, etapa 1):** rode `supabase/006_financeiro_cadastros.sql` e depois `supabase/006b_perfis_financeiro.sql` (troque os e-mails).
+
 **Atualização (Etapa 2 — equipamentos e EPI):** rode também, uma vez cada, `supabase/004_epi.sql` (o saldo do consultor passa a descontar o EPI entregue) e `supabase/005_equipamentos.sql` (tabelas de ferramentas/equipamentos locados e suas movimentações).
 
 As permissões foram testadas num Postgres local: `bash supabase/teste/rodar.sh`.
@@ -40,6 +42,16 @@ As permissões foram testadas num Postgres local: `bash supabase/teste/rodar.sh`
 - **Mais:** Histórico, Relatórios, Cadastros e Inventário.
 - **Relatórios novos (PDF e Excel):** ferramentas e equipamentos (onde está cada um), equipamentos locados e entrega de EPI por funcionário.
 - Só admin e almoxarife veem e lançam; o consultor continua vendo apenas saldos de material.
+
+## Financeiro — etapa 1: cadastros
+
+Primeira etapa do sistema de pedidos de pagamento, centros de custo e conciliação (desenho completo no documento "Desenho — Pagamentos, Centros de Custo e Conciliação").
+
+- **Perfis independentes do galpão:** `admin` (cadastra, aprova, vê tudo), `pagador` (paga e opera a folha; não vê relatórios nem despesas gerais) e `solicitante` (pede pagamentos). Quem só usa o financeiro entra direto na tela do financeiro e também consulta os saldos do galpão.
+- **Cadastros:** empresas (ALN, Passos) e contas bancárias; centros de custo (cada um de uma só empresa; tipos Obra, Administração e Estoque/Galpão; "outros nomes" para as grafias das planilhas); frentes de serviço dentro de cada centro (as mesmas do estoque); fornecedores (CPF/CNPJ e chave Pix conferidos, forma Pix, Boleto ou Fatura semanal com dia de fechamento); tipos de despesa.
+- **Começar:** botão "Criar cadastros iniciais" (ALN e Passos com as contas informadas, Administração e Estoque/Galpão de cada uma, 19 tipos de despesa) ou a planilha `modelos/Cadastros_Financeiro.xlsx` (já vem com centros e frentes da lista de presença). Importação em **Financeiro → Importar planilha**, com simulação e erros por aba e linha. Regerar o modelo: `python3 scripts/gerar_modelo_financeiro.py .`
+- **Frentes antigas do estoque:** em Centros de custo, cada contrato digitado no estoque aparece para ser ligado a um centro (ou virar um centro novo).
+- **Supabase:** rode `supabase/006_financeiro_cadastros.sql` (uma vez) e depois `supabase/006b_perfis_financeiro.sql` com os e-mails reais.
 
 ## Levantamento e treinamento
 

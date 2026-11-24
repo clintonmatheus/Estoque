@@ -3,9 +3,10 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { SaldoSimples } from '../auth/autenticacao';
 import type { Estoque, Lancamento } from '../dados/estoque';
+import type { Financeiro } from '../dados/financeiro';
 import { emPrazo, posicoesDoBem, situacaoLocacao, totalDoBem, divergenciasDeCobranca } from '../domain/bens';
 import { epiParaTrocar } from '../domain/epi';
-import { podeLancar, type Usuario } from '../domain/tipos';
+import { podeLancar, type PapelFinanceiro, type Usuario } from '../domain/tipos';
 import type { ServicoFotos } from '../fotos/servico';
 import type { EstadoSync } from '../sync/agendador';
 import { BarraUsuario, textoSync } from './BarraUsuario';
@@ -16,6 +17,7 @@ import { ConsultaTela } from './ConsultaTela';
 import { EpiTela } from './EpiTela';
 import { EstoqueTela } from './EstoqueTela';
 import { EquipamentosTela } from './EquipamentosTela';
+import { FinanceiroTela } from './FinanceiroTela';
 import { cores, estilos } from './estilos';
 import { HistoricoTela } from './HistoricoTela';
 import { ImportarTela } from './ImportarTela';
@@ -37,6 +39,8 @@ interface Props {
   usuario: Usuario;
   /** Ausente para o consultor (ele só consulta saldos online). */
   estoque?: Estoque;
+  /** Presente para quem tem perfil no financeiro. */
+  financeiro?: Financeiro;
   carregarSaldos: () => Promise<SaldoSimples[]>;
   servicoFotos: ServicoFotos;
   saida: SaidaRelatorio;
@@ -50,7 +54,10 @@ interface Props {
   escolherPlanilha?: () => Promise<Uint8Array | undefined>;
 }
 
+const NOME_FIN: Record<PapelFinanceiro, string> = { admin: 'administrador', pagador: 'pagador', solicitante: 'solicitante' };
+
 export function Raiz(p: Props) {
+  if (p.financeiro && p.usuario.financeiro && !podeLancar(p.usuario)) return <RaizFinanceiro {...p} financeiro={p.financeiro} />;
   if (!p.estoque || !podeLancar(p.usuario)) {
     return (
       <View style={estilos.tela}>
@@ -63,10 +70,34 @@ export function Raiz(p: Props) {
   return <RaizLancador {...p} estoque={p.estoque} />;
 }
 
-function RaizLancador({ usuario, estoque, servicoFotos, saida, hoje, agora, versao = 0, estadoSync, onSincronizar, onSair, escolherPlanilha }: Props & { estoque: Estoque }) {
+/** Quem usa só o financeiro (não lança no galpão): cadastros do financeiro e consulta de saldos. */
+function RaizFinanceiro({ usuario, financeiro, carregarSaldos, hoje, versao = 0, estadoSync, onSincronizar, onSair, escolherPlanilha }: Props & { financeiro: Financeiro }) {
+  const [tela, setTela] = useState<'financeiro' | 'saldos'>('financeiro');
+  const [local, setLocal] = useState(0);
+  return (
+    <View style={estilos.tela}>
+      <Cabecalho titulo={tela === 'financeiro' ? 'Financeiro' : 'Saldos do galpão'} subtitulo={`${usuario.nome} · ${NOME_FIN[usuario.financeiro!]} · ${textoSync(estadoSync)}`}
+        direita={<Pressable testID="sair" onPress={onSair} hitSlop={8}><Text style={estilos.voltar}>Sair</Text></Pressable>} />
+      <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+        <Chips prefixo="tela" valor={tela} onMudar={setTela} opcoes={[{ id: 'financeiro', titulo: 'Cadastros do financeiro' }, { id: 'saldos', titulo: 'Saldos do galpão' }]} />
+      </View>
+      <View style={{ flex: 1 }}>
+        {tela === 'financeiro' && <FinanceiroTela financeiro={financeiro} versao={versao + local} onAlterou={() => setLocal((n) => n + 1)} escolherPlanilha={escolherPlanilha} />}
+        {tela === 'saldos' && <ConsultaTela carregar={carregarSaldos} hoje={hoje} versao={versao} />}
+      </View>
+      {onSincronizar && (
+        <Pressable testID="sincronizar" onPress={onSincronizar} style={{ padding: 10, alignItems: 'center', backgroundColor: cores.card, borderTopWidth: 1, borderTopColor: cores.borda }}>
+          <Text style={{ color: cores.primaria, fontWeight: '700' }}>Sincronizar agora</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+function RaizLancador({ usuario, estoque, financeiro, servicoFotos, saida, hoje, agora, versao = 0, estadoSync, onSincronizar, onSair, escolherPlanilha }: Props & { estoque: Estoque }) {
   const [aba, setAba] = useState<Aba>('estoque');
   const [tipo, setTipo] = useState<Lancamento['tipo']>('saida');
-  const [mais, setMais] = useState<'menu' | 'historico' | 'relatorios' | 'cadastros' | 'inventario' | 'importar'>('menu');
+  const [mais, setMais] = useState<'menu' | 'historico' | 'relatorios' | 'cadastros' | 'inventario' | 'importar' | 'financeiro'>('menu');
   const [avisos, setAvisos] = useState({ equipamentos: 0, epi: 0 });
   const [local, setLocal] = useState(0);
   const v = versao + local;
@@ -84,7 +115,7 @@ function RaizLancador({ usuario, estoque, servicoFotos, saida, hoje, agora, vers
     });
   }, [estoque, hoje, v]);
 
-  const TITULOS = { historico: 'Histórico', relatorios: 'Relatórios', cadastros: 'Cadastros', inventario: 'Inventário', importar: 'Importar planilha' } as const;
+  const TITULOS = { historico: 'Histórico', relatorios: 'Relatórios', cadastros: 'Cadastros', inventario: 'Inventário', importar: 'Importar planilha', financeiro: 'Financeiro' } as const;
   const titulo = aba === 'mais' && mais !== 'menu' ? TITULOS[mais] : ABAS.find((a) => a.id === aba)!.titulo;
   return (
     <View style={estilos.tela}>
@@ -109,6 +140,7 @@ function RaizLancador({ usuario, estoque, servicoFotos, saida, hoje, agora, vers
         {aba === 'mais' && mais === 'relatorios' && <RelatoriosTela estoque={estoque} hoje={hoje} agora={agora} saida={saida} versao={v} />}
         {aba === 'mais' && mais === 'cadastros' && <CadastrosTela estoque={estoque} versao={v} onAlterou={alterou} />}
         {aba === 'mais' && mais === 'importar' && <ImportarTela estoque={estoque} hoje={hoje} escolherArquivo={escolherPlanilha ?? (async () => undefined)} onAlterou={alterou} />}
+        {aba === 'mais' && mais === 'financeiro' && financeiro && <FinanceiroTela financeiro={financeiro} versao={v} onAlterou={alterou} escolherPlanilha={escolherPlanilha} />}
         {aba === 'mais' && mais === 'inventario' && <InventarioTela estoque={estoque} hoje={hoje} versao={v} onConcluido={alterou} />}
         {aba === 'mais' && mais === 'menu' && (
           <ScrollView contentContainerStyle={estilos.conteudo}>
@@ -118,6 +150,9 @@ function RaizLancador({ usuario, estoque, servicoFotos, saida, hoje, agora, vers
             <ItemMenu testID="abrir-cadastros" icone="pricetags-outline" titulo="Cadastros" sub="Itens, frentes de serviço e funcionários" onPress={() => setMais('cadastros')} />
             <ItemMenu testID="abrir-inventario" icone="clipboard-outline" titulo="Inventário" sub="Contagem física do galpão" onPress={() => setMais('inventario')} />
             <ItemMenu testID="abrir-importar" icone="cloud-upload-outline" titulo="Importar planilha" sub="Levantamento geral: materiais, equipamentos, frentes e funcionários" onPress={() => setMais('importar')} />
+            {financeiro && usuario.financeiro && (
+              <ItemMenu testID="abrir-financeiro" icone="wallet-outline" titulo="Financeiro" sub="Empresas, contas, centros de custo, fornecedores e tipos de despesa" onPress={() => setMais('financeiro')} />
+            )}
           </ScrollView>
         )}
       </View>

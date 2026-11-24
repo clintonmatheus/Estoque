@@ -3,6 +3,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { SaldoSimples } from '../auth/autenticacao';
 import { Estoque } from '../dados/estoque';
+import { Financeiro } from '../dados/financeiro';
 import { calcularPosicao } from '../domain/estoque';
 import type { Posse, Usuario } from '../domain/tipos';
 import { criarArmazenamentoMemoria } from '../storage/memoria';
@@ -17,11 +18,31 @@ import { Raiz } from '../telas/Raiz';
 const HOJE = '2026-11-24';
 const MARILIA: Usuario = { id: 'u-marilia', nome: 'Marilia', papel: 'almoxarife' };
 const ARTHUR: Usuario = { id: 'u-arthur', nome: 'Arthur', papel: 'consultor' };
+const CLINTON: Usuario = { id: 'u-clinton', nome: 'Clinton', papel: 'admin', financeiro: 'admin' };
+const PAGADORA: Usuario = { id: 'u-pag', nome: 'Assistente adm.', papel: 'consultor', financeiro: 'pagador' };
+
+const armazenamento = criarArmazenamentoMemoria();
+
+/** Cadastros do financeiro de exemplo (os mesmos nomes da planilha modelo). */
+async function montarFinanceiro(): Promise<void> {
+  let s = 0;
+  const f = new Financeiro(armazenamento, CLINTON, { agora: () => `${HOJE}T12:00:00.000Z`, novoId: () => `f${++s}` });
+  await f.criarCadastrosIniciais();
+  const [aln, passos] = await f.empresas();
+  await f.salvarEmpresa({ ...aln, cnpj: '11.222.333/0001-81' }); // CNPJ fictício (exemplo)
+  const rmg = await f.salvarCentro({ nome: 'RMG ÁGUA', empresaId: aln.id, apelidos: ['CAIXA RMG'], ativo: true });
+  for (const n of ['RMG MACAIBA', 'RMG PUREZA', 'RMG PEDRA GRANDE', 'RMG SÃO PEDRO DO POTENGI']) await f.salvarFrente({ nome: n, centroId: rmg.id, ativo: true });
+  const funpec = await f.salvarCentro({ nome: 'FUNPEC', empresaId: passos.id, apelidos: ['CAIXA FUNPEC'], ativo: true });
+  await f.salvarFrente({ nome: 'FUNPEC', centroId: funpec.id, ativo: true });
+  await f.salvarFornecedor({ nome: 'Aço Potiguar', documento: '05948553000275', chavePix: '05948553000275', forma: 'pix', ativo: true });
+  await f.salvarFornecedor({ nome: 'Casa do Construtor', forma: 'fatura', diaFechamento: 'sexta', ativo: true });
+  await f.salvarFornecedor({ nome: 'Iquine Distribuidora', forma: 'boleto', ativo: true });
+}
 
 async function montar(): Promise<Estoque> {
   let s = 0;
   let t = Date.UTC(2026, 10, 1, 11);
-  const e = new Estoque(criarArmazenamentoMemoria(), MARILIA, { agora: () => new Date((t += 60_000)).toISOString(), novoId: () => `d${++s}` });
+  const e = new Estoque(armazenamento, MARILIA, { agora: () => new Date((t += 60_000)).toISOString(), novoId: () => `d${++s}` });
   await e.importarItensIniciais();
   const itens = await e.itens();
   const riach = await e.salvarLocal({ nome: 'Riachuelo', centroCusto: 'Escritórios da RMG', ativo: true });
@@ -65,6 +86,7 @@ async function montar(): Promise<Estoque> {
     nome: 'Andaime tubular 1,0 x 1,5 m', tipo: 'locado', controle: 'quantidade', ativo: true,
     locacao: { locadora: 'Casa do Construtor', contrato: 'NT-778', valor: 1.2, periodo: 'dia', inicio: '2026-11-01', prevista: '2027-01-31', localCobrancaId: ubs.id },
   }, { posse: campo(carlos.id, ubs.id), quantidade: 30, data: '2026-11-01' });
+  await montarFinanceiro();
   return e;
 }
 
@@ -80,9 +102,10 @@ export function Previa() {
   let conteudo;
   if (perfil === 'login') conteudo = <LoginTela entrar={async () => { throw new Error('Prévia'); }} onEntrou={() => {}} />;
   else {
-    const usuario = perfil === 'consultor' ? ARTHUR : MARILIA;
+    const usuario = perfil === 'consultor' ? ARTHUR : perfil === 'financeiro' ? CLINTON : perfil === 'pagador' ? PAGADORA : MARILIA;
+    const financeiro = usuario.financeiro ? new Financeiro(armazenamento, usuario, { agora: () => `${HOJE}T15:00:00.000Z`, novoId: () => `n${Date.now()}` }) : undefined;
     conteudo = (
-      <Raiz usuario={usuario} estoque={perfil === 'consultor' ? undefined : estoque} carregarSaldos={saldos}
+      <Raiz usuario={usuario} estoque={perfil === 'consultor' || perfil === 'pagador' ? undefined : estoque} financeiro={financeiro} carregarSaldos={saldos}
         servicoFotos={{ tirarFoto: async () => undefined, escolherDaGaleria: async () => undefined }}
         saida={{ pdf: async () => {}, xlsx: async () => {} }} hoje={HOJE} agora={() => `${HOJE}T15:00:00.000Z`}
         estadoSync={{ sincronizando: false, recebidos: 0, ultimaEm: `${HOJE}T14:58:00.000Z` }}

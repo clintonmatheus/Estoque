@@ -121,6 +121,9 @@ export class Estoque {
       ...n, id: n.id ?? this.o.novoId(), nome, centroCusto,
       criado: atual?.criado ?? this.autoria(), ...(atual ? { alterado: this.autoria() } : {}),
     };
+    // Ligação com o centro de custo do financeiro: mantida enquanto o contrato não mudar.
+    if (atual?.centroId && atual.centroCusto === centroCusto) local.centroId = atual.centroId;
+    else delete local.centroId;
     await this.gravar('locais', local);
     this.alterou();
     return local;

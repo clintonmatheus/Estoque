@@ -1,4 +1,5 @@
 import { Estoque } from '../dados/estoque';
+import { Financeiro } from '../dados/financeiro';
 import type { Usuario } from '../domain/tipos';
 import type { Armazenamento } from '../storage/contrato';
 import { criarArmazenamentoMemoria } from '../storage/memoria';
@@ -27,4 +28,16 @@ export async function estoqueComCadastros(usuario: Usuario = MARILIA) {
   const macaiba = await t.estoque.salvarLocal({ nome: 'Macaíba', centroCusto: 'Escritórios da RMG', ativo: true });
   const joao = await t.estoque.salvarFuncionario({ nome: 'João', ativo: true });
   return { ...t, tinta, piso, riachuelo, macaiba, joao };
+}
+
+export const CLINTON_FIN: Usuario = { ...CLINTON, financeiro: 'admin' };
+export const PAGADORA: Usuario = { id: 'u-pagadora', nome: 'Pagadora', papel: 'consultor', financeiro: 'pagador' };
+
+/** Financeiro em memória (pode compartilhar o armazenamento com um Estoque). */
+export function financeiroDeTeste(usuario: Usuario = CLINTON_FIN, a: Armazenamento = criarArmazenamentoMemoria()) {
+  const financeiro = new Financeiro(a, usuario, {
+    agora: () => new Date(Date.UTC(2026, 10, 24, 12, 0, relogio++)).toISOString(),
+    novoId: () => `${usuario.id}-${++seq}`,
+  });
+  return { financeiro, armazenamento: a };
 }
