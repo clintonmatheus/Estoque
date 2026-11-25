@@ -234,7 +234,7 @@ function FormFuncionario({ estoque, funcionario, epi = false, onFim, onVoltar }:
   const [ativo, setAtivo] = useState(funcionario?.ativo ?? true);
   const [cpf, setCpf] = useState(funcionario?.cpf ? formatarDocumento(funcionario.cpf) : '');
   const [funcao, setFuncao] = useState(funcionario?.funcao ?? '');
-  const [tam, setTam] = useState<Record<TipoTamanho, string>>({ calcado: funcionario?.tamanhos?.calcado ?? '', camisa: funcionario?.tamanhos?.camisa ?? '', luva: funcionario?.tamanhos?.luva ?? '' });
+  const [tam, setTam] = useState<Record<TipoTamanho, string>>({ calcado: funcionario?.tamanhos?.calcado ?? '', camisa: funcionario?.tamanhos?.camisa ?? '', calca: funcionario?.tamanhos?.calca ?? '', luva: funcionario?.tamanhos?.luva ?? '' });
   const [erro, setErro] = useState<string>();
   async function salvar() {
     setErro(undefined);

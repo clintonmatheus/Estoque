@@ -73,7 +73,7 @@ export interface Item {
   vidaUtilDias?: number;
   /** EPI: tamanhos que existem (ex.: 38, 39, 40 ou P, M, G). */
   tamanhos?: string[];
-  /** EPI: qual tamanho do funcionário serve para este item (calçado, camisa ou luva). */
+  /** EPI: qual tamanho do funcionário serve para este item (calçado, camisa, calça ou luva). */
   tipoTamanho?: TipoTamanho;
   ativo: boolean;
   criado: Autoria;
@@ -97,8 +97,8 @@ export interface Local {
 export const CATEGORIA_EPI = 'EPI';
 export const ehEpi = (i: Pick<Item, 'categoria'>) => i.categoria === CATEGORIA_EPI;
 
-export type TipoTamanho = 'calcado' | 'camisa' | 'luva';
-export const NOME_TAMANHO: Record<TipoTamanho, string> = { calcado: 'Calçado', camisa: 'Camisa', luva: 'Luva' };
+export type TipoTamanho = 'calcado' | 'camisa' | 'calca' | 'luva';
+export const NOME_TAMANHO: Record<TipoTamanho, string> = { calcado: 'Calçado', camisa: 'Camisa', calca: 'Calça', luva: 'Luva' };
 
 /**
  * galpao: quem retira material e ferramentas do galpão; epi: quem recebe EPI.

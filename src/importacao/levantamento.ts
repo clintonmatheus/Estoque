@@ -45,7 +45,7 @@ export function numero(c: Celula): number | undefined {
 }
 
 /** Lê as linhas de uma aba pelos cabeçalhos (a ordem das colunas pode mudar). */
-export function linhasDaAba(abas: Abas, aba: { nome: string; colunas: readonly string[] }, erros: ErroImportacao[]) {
+export function linhasDaAba(abas: Abas, aba: { nome: string; colunas: readonly string[]; opcionais?: readonly string[] }, erros: ErroImportacao[]) {
   const chave = Object.keys(abas).find((k) => normalizar(k) === normalizar(aba.nome));
   if (!chave) return [];
   const linhas = abas[chave];
@@ -53,13 +53,13 @@ export function linhasDaAba(abas: Abas, aba: { nome: string; colunas: readonly s
   if (iCab < 0) { erros.push({ aba: aba.nome, linha: 1, mensagem: `Cabeçalho "${aba.colunas[0]}" não encontrado` }); return []; }
   const pos = new Map<string, number>();
   linhas[iCab].forEach((c, i) => { if (typeof c === 'string') pos.set(normalizar(c), i); });
-  const faltando = aba.colunas.filter((c) => !pos.has(normalizar(c)));
+  const faltando = aba.colunas.filter((c) => !pos.has(normalizar(c)) && !aba.opcionais?.includes(c));
   if (faltando.length) { erros.push({ aba: aba.nome, linha: iCab + 1, mensagem: `Faltam as colunas: ${faltando.join(', ')}` }); return []; }
   const saida: { linha: number; v: (coluna: string) => Celula }[] = [];
   for (let i = iCab + 1; i < linhas.length; i++) {
     const l = linhas[i];
     if (!l || !l.some((c) => c !== undefined)) continue;
-    saida.push({ linha: i + 1, v: (coluna) => l[pos.get(normalizar(coluna))!] });
+    saida.push({ linha: i + 1, v: (coluna) => { const p = pos.get(normalizar(coluna)); return p === undefined ? undefined : l[p]; } });
   }
   return saida;
 }

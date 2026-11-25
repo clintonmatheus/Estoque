@@ -25,12 +25,12 @@ describe('planilhas de EPI', () => {
     const { estoque } = await estoqueComCadastros();
     const galpao = await estoque.salvarFuncionario({ nome: 'José Almeida', ativo: true }); // mesmo nome, outro grupo
     const bytes = await planilha({
-      'Funcionários EPI': [cab('funcionarios'), ['José Almeida', '123.456.789-09', 'Servente', 41, 'G', 'G'], ['Ana', 12345678909 + 1, undefined, undefined, undefined, undefined, 'Inativo']],
+      'Funcionários EPI': [cab('funcionarios'), ['José Almeida', '123.456.789-09', 'Servente', 41, 'G', 42, 'G'], ['Ana', 12345678909 + 1, undefined, undefined, undefined, undefined, undefined, 'Inativo']],
       'Itens EPI': [cab('itens'), ['Bota de segurança', 'par', '42291', 180, '38; 39; 40; 41', 'Calçado', 4, '38: 2; 39: 3; 40: 4; 41: 1', 89.9], ['Capacete', 'un']],
     });
     const d = lerEpi(await lerXlsx(bytes));
     expect(d.erros).toEqual([]);
-    expect(d.funcionarios[0]).toMatchObject({ cpf: '12345678909', tamanhos: { calcado: '41', camisa: 'G', luva: 'G' }, ativo: true });
+    expect(d.funcionarios[0]).toMatchObject({ cpf: '12345678909', tamanhos: { calcado: '41', camisa: 'G', calca: '42', luva: 'G' }, ativo: true });
     expect(d.funcionarios[1]).toMatchObject({ cpf: '12345678910', ativo: false });
 
     const sim = await simularEpi(estoque, d, '2026-11-25');
@@ -62,7 +62,7 @@ describe('planilhas de EPI', () => {
     const { estoque } = await estoqueComCadastros();
     await estoque.salvarItem({ nome: 'Tinta', unidade: 'lata', estoqueMinimo: 0, ativo: true });
     const bytes = await planilha({
-      'Funcionários EPI': [cab('funcionarios'), [undefined, '1'], ['Zé', undefined, undefined, undefined, undefined, undefined, 'Talvez']],
+      'Funcionários EPI': [cab('funcionarios'), [undefined, '1'], ['Zé', undefined, undefined, undefined, undefined, undefined, undefined, 'Talvez']],
       'Itens EPI': [cab('itens'), ['Capacete'], ['Tinta', 'lata'], ['Luva', 'par', undefined, 0], ['Bota', 'par', undefined, undefined, undefined, 'Chapéu']],
     });
     const d = lerEpi(await lerXlsx(bytes));
@@ -97,5 +97,15 @@ describe('planilhas de EPI', () => {
     expect(d.erros.map((e) => `${e.linha}: ${e.mensagem}`)).toEqual(['3: Item com tamanhos: informe o saldo de cada tamanho, ex.: "P: 1; M: 2; G: 3"']);
     expect(d.itens[0]).toMatchObject({ tamanhos: ['38', '39', '40'], saldo: 9, saldoPorTamanho: [{ tamanho: '38', quantidade: 2 }, { tamanho: '39', quantidade: 3 }, { tamanho: '40', quantidade: 4 }] });
     expect(d.itens[1]).toMatchObject({ nome: 'Óculos', saldo: 5 });
+  });
+  it('planilha antiga, sem a coluna Calça, continua sendo aceita; item de calça usa o tamanho de calça', async () => {
+    const bytes = await planilha({
+      'Funcionários EPI': [['Nome', 'CPF', 'Função', 'Calçado', 'Camisa', 'Luva', 'Situação'], ['Pedro', undefined, 'Servente', 40, 'M', 'G']],
+      'Itens EPI': [cab('itens'), ['Calça de uniforme', 'un', undefined, 180, undefined, 'Calça', 0, '40: 2; 42: 3', 60]],
+    });
+    const d = lerEpi(await lerXlsx(bytes));
+    expect(d.erros).toEqual([]);
+    expect(d.funcionarios[0].tamanhos).toEqual({ calcado: '40', camisa: 'M', luva: 'G' });
+    expect(d.itens[0]).toMatchObject({ tipoTamanho: 'calca', tamanhos: ['40', '42'] });
   });
 });

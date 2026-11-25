@@ -6,7 +6,7 @@ import { linhasDaAba, normalizar, numero, opcao, texto, type ErroImportacao } fr
 
 /** Abas e cabeçalhos das planilhas de EPI (modelos/Funcionarios_EPI.xlsx e modelos/Itens_EPI.xlsx). */
 export const ABAS_EPI = {
-  funcionarios: { nome: 'Funcionários EPI', colunas: ['Nome', 'CPF', 'Função', 'Calçado', 'Camisa', 'Luva', 'Situação'] },
+  funcionarios: { nome: 'Funcionários EPI', colunas: ['Nome', 'CPF', 'Função', 'Calçado', 'Camisa', 'Calça', 'Luva', 'Situação'], opcionais: ['Calça'] },
   itens: {
     nome: 'Itens EPI',
     colunas: ['Item', 'Unidade', 'Nº do CA', 'Vida útil (dias)', 'Tamanhos disponíveis', 'Tamanho do funcionário', 'Estoque mínimo', 'Saldo inicial', 'Custo unitário (R$)'],
@@ -29,7 +29,7 @@ export interface ResumoEpi {
   funcionarios: number; funcionariosAtualizados: number; itensNovos: number; itensAtualizados: number; itensComSaldo: number;
 }
 
-const TIPOS_TAMANHO = { calcado: 'calcado', camisa: 'camisa', luva: 'luva' } as const;
+const TIPOS_TAMANHO = { calcado: 'calcado', camisa: 'camisa', calca: 'calca', luva: 'luva' } as const;
 const SITUACAO = { ativo: true, inativo: false } as const;
 
 /** CPF digitado como número perde o zero da frente: completa para 11 dígitos. */
@@ -52,6 +52,7 @@ export function lerEpi(abas: Abas): DadosEpi {
       const funcao = texto(v('Função')); if (funcao) f.funcao = funcao;
       const calcado = texto(v('Calçado')); if (calcado) f.tamanhos.calcado = calcado;
       const camisa = texto(v('Camisa')); if (camisa) f.tamanhos.camisa = camisa;
+      const calca = texto(v('Calça')); if (calca) f.tamanhos.calca = calca;
       const luva = texto(v('Luva')); if (luva) f.tamanhos.luva = luva;
       f.ativo = opcao(v('Situação'), { ativo: 'ativo', inativo: 'inativo' } as const, 'Situação') !== 'inativo';
       r.funcionarios.push(f);
@@ -69,7 +70,7 @@ export function lerEpi(abas: Abas): DadosEpi {
       if (vida !== undefined) { if (!Number.isInteger(vida) || vida <= 0) throw new Error('Vida útil: informe os dias até a troca (número inteiro)'); i.vidaUtilDias = vida; }
       const tam = texto(v('Tamanhos disponíveis'));
       if (tam) i.tamanhos = [...new Set(tam.split(/[;,/]/).map(normalizarTamanho).filter(Boolean))];
-      const tipo = opcao(v('Tamanho do funcionário'), { calcado: 'calcado', calçado: 'calcado', camisa: 'camisa', luva: 'luva' } as Record<string, TipoTamanho>, 'Tamanho do funcionário');
+      const tipo = opcao(v('Tamanho do funcionário'), { calcado: 'calcado', calçado: 'calcado', camisa: 'camisa', calca: 'calca', calça: 'calca', luva: 'luva' } as Record<string, TipoTamanho>, 'Tamanho do funcionário');
       if (tipo) i.tipoTamanho = tipo;
       const min = numero(v('Estoque mínimo'));
       if (min !== undefined) { if (min < 0) throw new Error('Estoque mínimo não pode ser negativo'); i.minimo = min; }

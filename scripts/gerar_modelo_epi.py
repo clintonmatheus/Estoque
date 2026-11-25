@@ -56,15 +56,15 @@ instrucoes(wb, [
     ('• Nome (obrigatório).', ''),
     ('• CPF — opcional, com ou sem pontuação. Evita duplicar homônimos; se informado, é conferido.', ''),
     ('• Função — ex.: servente, pedreiro, eletricista.', ''),
-    ('• Calçado, Camisa e Luva — tamanhos usuais. O app só SUGERE ao entregar o EPI: na entrega pode ir outro tamanho, e o cadastro pode ser mudado a qualquer momento.', ''),
+    ('• Calçado, Camisa, Calça e Luva — tamanhos usuais. O app só SUGERE ao entregar o EPI: na entrega pode ir outro tamanho, e o cadastro pode ser mudado a qualquer momento.', ''),
     ('• Situação — Ativo (padrão) ou Inativo.', ''),
     ('', ''),
     ('QUEM JÁ ESTÁ NO APP', 'secao'),
     ('Quem já está cadastrado como funcionário de EPI (mesmo CPF ou mesmo nome) não é duplicado: só são completados CPF, função e tamanhos que estiverem preenchidos aqui.', ''),
-    ('Não mude o nome da aba nem os cabeçalhos (linha 1). Exemplo de linha: Nome = José Almeida · CPF = 123.456.789-09 · Função = Servente · Calçado = 41 · Camisa = G · Luva = G · Situação = Ativo.', ''),
+    ('Não mude o nome da aba nem os cabeçalhos (linha 1). Exemplo de linha: Nome = José Almeida · CPF = 123.456.789-09 · Função = Servente · Calçado = 41 · Camisa = G · Calça = 42 · Luva = G · Situação = Ativo.', ''),
 ])
-ws = aba(wb, 'Funcionários EPI', [('Nome', 32), ('CPF', 18), ('Função', 22), ('Calçado', 11), ('Camisa', 11), ('Luva', 11), ('Situação', 12)], [], texto_cols='BDEF')
-lista(ws, 'G', '"Ativo,Inativo"')
+ws = aba(wb, 'Funcionários EPI', [('Nome', 32), ('CPF', 18), ('Função', 22), ('Calçado', 11), ('Camisa', 11), ('Calça', 11), ('Luva', 11), ('Situação', 12)], [], texto_cols='BDEFG')
+lista(ws, 'H', '"Ativo,Inativo"')
 wb.save(f'{RAIZ}/modelos/Funcionarios_EPI.xlsx')
 
 # ---------- Itens de EPI ----------
@@ -79,7 +79,7 @@ instrucoes(wb, [
     ('• Nº do CA — Certificado de Aprovação padrão do item; vem preenchido na entrega e pode ser trocado.', ''),
     ('• Vida útil (dias) — dias até a troca. Na entrega o app sugere a data de troca (data da entrega + vida útil). Ex.: bota 180.', ''),
     ('• Tamanhos disponíveis — separe com ponto e vírgula. Ex.: 38; 39; 40; 41  ou  P; M; G; GG. Viram botões na entrega, na compra e no inventário. Item com tamanhos tem saldo separado por tamanho.', ''),
-    ('• Tamanho do funcionário — Calçado, Camisa ou Luva: qual tamanho do cadastro do funcionário serve para este item (o app sugere esse tamanho). Deixe em branco para capacete, óculos etc.', ''),
+    ('• Tamanho do funcionário — Calçado, Camisa, Calça ou Luva: qual tamanho do cadastro do funcionário serve para este item (o app sugere esse tamanho). Deixe em branco para capacete, óculos etc.', ''),
     ('• Estoque mínimo — o app avisa quando o saldo chega nele.', ''),
     ('• Saldo inicial — quantidade que já está no estoque de EPI hoje. Item SEM tamanhos: só o número (ex.: 12). Item COM tamanhos: a quantidade de cada tamanho, separada por ponto e vírgula. Ex.: 3 botas 39, 2 botas 38 e 4 botas 40 → 38: 2; 39: 3; 40: 4  (os tamanhos escritos aqui entram sozinhos em "Tamanhos disponíveis").', ''),
     ('• Custo unitário (R$) — opcional, vale para todos os tamanhos do item (item sem valor fica só catalogado).', ''),
@@ -99,12 +99,13 @@ ITENS = [
     ('Protetor auricular', 'un', None, None, None, None),
     ('Máscara respiratória', 'un', None, None, None, None),
     ('Camisa de uniforme', 'un', None, None, None, 'Camisa'),
+    ('Calça de uniforme', 'un', None, None, None, 'Calça'),
     ('Cinto de segurança', 'un', None, None, None, None),
 ]
 ws = aba(wb, 'Itens EPI', [('Item', 30), ('Unidade', 10), ('Nº do CA', 12), ('Vida útil (dias)', 16), ('Tamanhos disponíveis', 28),
                           ('Tamanho do funcionário', 22), ('Estoque mínimo', 15), ('Saldo inicial', 13), ('Custo unitário (R$)', 18)],
          [(n, u, ca, v, t, tt) for n, u, ca, v, t, tt in ITENS], texto_cols='CE')
-lista(ws, 'F', '"Calçado,Camisa,Luva"')
+lista(ws, 'F', '"Calçado,Camisa,Calça,Luva"')
 for r in range(2, 1001):
     ws[f'I{r}'].number_format = '#,##0.00'
 wb.save(f'{RAIZ}/modelos/Itens_EPI.xlsx')
