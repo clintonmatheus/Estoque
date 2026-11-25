@@ -103,9 +103,10 @@ describe('teste geral do sistema', () => {
     await sincronizar();
     expect(remoto.arquivosEnviados.length).toBeGreaterThanOrEqual(3);
     expect((await joana.fin.compras.emAberto())[0].total).toBe(1234.56);
-    const fatura = { tipo: 'boleto' as const, descricao: 'Fatura Casa do Construtor', valor: 1234.56, centroId: rmg.id, fornecedorId: loja.id, boleto: '00190.12343 56789.012343 56789.012343 1 16560000123456', fatura: { compras: [c1.id, c2.id] } };
+    const fatura = { tipo: 'boleto' as const, descricao: 'Fatura Casa do Construtor', valor: 1234.56, fornecedorId: loja.id, boleto: '00190.12343 56789.012343 56789.012343 1 16560000123456', fatura: { compras: [c1.id, c2.id] } };
     const pf = await joana.fin.pedidos.solicitar(fatura);
-    expect(pf).toMatchObject({ aprovador: 'admin', centroId: rmg.id });
+    expect(pf).toMatchObject({ aprovador: 'admin' });
+    expect(pf.centroId).toBeUndefined();
     await sincronizar();
     expect((await adm.fin.pedidos.cancelar(pf.id, 'Boleto errado')).status).toBe('cancelado');
     await sincronizar();

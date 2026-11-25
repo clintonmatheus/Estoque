@@ -191,7 +191,7 @@ function FecharFatura({ financeiro, loja, servicoFotos, hoje, onVoltar, onFechad
       let venc: string | undefined;
       if (vencimento.trim()) { try { venc = analisarDataBR(vencimento); } catch { throw new Error('Vencimento inválido (use dia/mês/ano)'); } }
       const p = await financeiro.pedidos.solicitar({
-        tipo, descricao: `Fatura ${f.nome} — ${escolhidas.length} compra(s)`, valor: valorFatura, centroId: escolhidas[0].centroId, fornecedorId: f.id,
+        tipo, descricao: `Fatura ${f.nome} — ${escolhidas.length} compra(s)`, valor: valorFatura, fornecedorId: f.id,
         ...(tipo === 'boleto' ? { boleto } : { chavePix }), ...(venc ? { vencimento: venc } : {}),
         fatura: { compras: escolhidas.map((c) => c.id), ...(justificativa.trim() ? { justificativa } : {}) },
       });

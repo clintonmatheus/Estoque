@@ -23,7 +23,7 @@ export const ITENS_INICIAIS: Pick<Item, 'id' | 'nome' | 'unidade' | 'embalagem' 
   {id: "i-luminaria-36w", nome: "LUMINARIA 36W", unidade: "un", custoReferencia: 18.05},
   {id: "i-massa-acrilica-iquine-25kg", nome: "MASSA ACRILICA IQUINE 25KG", unidade: "balde", custoReferencia: 65.44},
   {id: "i-massa-acrilica-super-tintas-22kg", nome: "MASSA ACRILICA SUPER TINTAS 22KG", unidade: "balde", custoReferencia: 55},
-  {id: "i-massa-corrida-fama", nome: "MASSA CORRIDA FAMA", unidade: "balde", custoReferencia: 24},
+  {id: "i-massa-corrida-fama", nome: "MASSA CORRIDA FAMA", unidade: "saco", custoReferencia: 24},
   {id: "i-massa-corrida-fortnil", nome: "MASSA CORRIDA FORTNIL", unidade: "balde", custoReferencia: 40.8},
   {id: "i-massa-corrida-hipercor-20kg", nome: "MASSA CORRIDA HIPERCOR 20KG", unidade: "balde", custoReferencia: 27.82},
   {id: "i-massa-corrida-sbras", nome: "MASSA CORRIDA SBRAS", unidade: "balde", custoReferencia: 28.74},

@@ -8,7 +8,7 @@ import { lerNotaXml } from '../domain/nota';
 import { soNumeros } from '../domain/nomes';
 import { ordemDePagamento, podeAprovar, podeConferirOuPagar, podeEditar, prazoDoPedido, type Prazo } from '../domain/pedidos';
 import {
-  ehAdminFinanceiro, NOME_STATUS_PEDIDO, NOME_TIPO_PEDIDO, type Anexo, type CentroCusto, type ContaBancaria, type Empresa, type Fornecedor, type Local, type Pedido, type TipoDespesa, type TipoPedido,
+  ehAdminFinanceiro, NOME_STATUS_PEDIDO, NOME_TIPO_PEDIDO, type Anexo, type CentroCusto, type Compra, type ContaBancaria, type Empresa, type Fornecedor, type Local, type Pedido, type TipoDespesa, type TipoPedido,
 } from '../domain/tipos';
 import type { DocumentoEscolhido, ServicoFotos } from '../fotos/servico';
 import { Botao, Campo, Cartao, Chips, Mensagem, Seletor } from './componentes';
@@ -95,7 +95,7 @@ export function PedidosTela({ financeiro, servicoFotos, hoje, versao = 0, onAlte
               <Text style={estilos.valor}>{reais(p.valor)}</Text>
             </View>
             <Text style={estilos.subtitulo}>{NOME_TIPO_PEDIDO[p.tipo]} · {p.descricao}</Text>
-            <Text style={estilos.subtitulo}>{nomeCentro(p.centroId)}{p.vencimento ? ` · vence ${dataBR(p.vencimento)}` : ''}</Text>
+            <Text style={estilos.subtitulo}>{p.fatura ? `Fatura de ${p.fatura.compras.length} compra(s)` : nomeCentro(p.centroId ?? '')}{p.vencimento ? ` · vence ${dataBR(p.vencimento)}` : ''}</Text>
             <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
               <Text style={{ color: COR_STATUS[p.status], fontWeight: '700', fontSize: 13 }}>{NOME_STATUS_PEDIDO[p.status]}</Text>
               {p.urgente && <Text style={{ color: cores.erro, fontWeight: '700', fontSize: 13 }}>URGENTE</Text>}
@@ -106,6 +106,20 @@ export function PedidosTela({ financeiro, servicoFotos, hoje, versao = 0, onAlte
       })}
     </ScrollView>
   );
+}
+
+/** Total da fatura por centro de custo e frente de serviço (cada compra tem o seu). */
+function divisaoPorCentro(compras: Compra[], cad: Cadastros): { chave: string; nome: string; total: number }[] {
+  const mapa = new Map<string, { chave: string; nome: string; total: number }>();
+  for (const c of compras) {
+    const centro = cad.centros.find((x) => x.id === c.centroId)?.nome ?? '—';
+    const frente = c.frenteId ? cad.frentes.find((x) => x.id === c.frenteId)?.nome : undefined;
+    const chave = `${c.centroId}${c.frenteId ? `-${c.frenteId}` : ''}`;
+    const atual = mapa.get(chave) ?? { chave, nome: frente ? `${centro} · ${frente}` : centro, total: 0 };
+    atual.total = Math.round((atual.total + c.valor) * 100) / 100;
+    mapa.set(chave, atual);
+  }
+  return [...mapa.values()].sort((a, b) => b.total - a.total);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -128,6 +142,7 @@ function PedidoForm({ financeiro, cad, servicoFotos, hoje, pedido, pedidos, onVo
   const [tipoDespesaId, setTipoDespesaId] = useState(pedido?.tipoDespesaId);
   const [vencimento, setVencimento] = useState(pedido?.vencimento ? formatarDataBR(pedido.vencimento) : '');
   const [urgente, setUrgente] = useState(!!pedido?.urgente);
+  const [justificativa, setJustificativa] = useState(pedido?.fatura?.justificativa ?? '');
   const [nota, setNota] = useState<Pedido['nota']>(pedido?.nota);
   const [anexos, setAnexos] = useState<AnexoPendente[]>([]);
   const [info, setInfo] = useState<string>();
@@ -165,13 +180,14 @@ function PedidoForm({ financeiro, cad, servicoFotos, hoje, pedido, pedidos, onVo
 
   const enviar = async (confirmarDuplicado = false) => {
     setErro(undefined);
-    if (!centroId) { setErro('Escolha o centro de custo'); return; }
+    if (!centroId && !pedido?.fatura) { setErro('Escolha o centro de custo'); return; }
     const v = lerNumero(valor);
     if (v === undefined || !(v > 0)) { setErro('Informe o valor do pedido'); return; }
     let venc: string | undefined;
     if (vencimento.trim()) { try { venc = analisarDataBR(vencimento); } catch { setErro('Vencimento inválido (use dia/mês/ano)'); return; } }
     const novo: NovoPedido = {
-      ...(pedido ? { id: pedido.id } : {}), tipo, descricao, valor: v, centroId,
+      ...(pedido ? { id: pedido.id } : {}), tipo, descricao, valor: v, ...(centroId && !pedido?.fatura ? { centroId } : {}),
+      ...(pedido?.fatura ? { fatura: { compras: pedido.fatura.compras, ...(justificativa.trim() ? { justificativa } : {}) } } : {}),
       ...(frenteId ? { frenteId } : {}), ...(tipoDespesaId ? { tipoDespesaId } : {}),
       ...(fornecedorId ? { fornecedorId } : {}), ...(favorecido.trim() ? { favorecido } : {}),
       ...(tipo !== 'boleto' && chavePix.trim() ? { chavePix } : {}), ...(tipo === 'boleto' ? { boleto } : {}),
@@ -228,6 +244,14 @@ function PedidoForm({ financeiro, cad, servicoFotos, hoje, pedido, pedidos, onVo
         <View style={estilos.linha}><Text style={estilos.titulo}>Urgente</Text><Switch testID="pedido-urgente" value={urgente} onValueChange={setUrgente} /></View>
       </Cartao>
 
+      {pedido?.fatura && (
+        <Cartao>
+          <Text style={estilos.secao}>Fatura semanal</Text>
+          <Text style={estilos.subtitulo}>O custo está dividido nas {pedido.fatura.compras.length} compra(s) da fatura; não há centro de custo neste pedido.</Text>
+          <Campo testID="pedido-justificativa" rotulo="Explicação da diferença entre a fatura e a soma das compras" value={justificativa} onChangeText={setJustificativa} />
+        </Cartao>
+      )}
+      {!pedido?.fatura && (
       <Cartao>
         <Text style={estilos.secao}>A quem pertence o custo</Text>
         <Seletor testID="pedido-centro" rotulo="Centro de custo (obrigatório)" valor={centroId} opcoes={cad.centros.map((c) => ({ id: c.id, titulo: c.nome }))}
@@ -237,6 +261,7 @@ function PedidoForm({ financeiro, cad, servicoFotos, hoje, pedido, pedidos, onVo
         )}
         <Seletor testID="pedido-tipo-despesa" rotulo="Tipo de despesa (opcional)" valor={tipoDespesaId} vazio="Não sei" opcoes={cad.tipos.map((t) => ({ id: t.id, titulo: t.nome }))} onEscolher={setTipoDespesaId} />
       </Cartao>
+      )}
 
       {erro && <Text testID="erro" style={estilos.erro}>{erro}</Text>}
       {duplicado
@@ -263,8 +288,14 @@ function PedidoDetalhe({ financeiro, cad, servicoFotos, hoje, pedido: p, versao,
   const [frenteId, setFrenteId] = useState<string | null | undefined>(p.frenteId);
   const [tipoDespesaId, setTipoDespesaId] = useState(p.tipoDespesaId);
   const [pagando, setPagando] = useState(false);
+  const [comprasFatura, setComprasFatura] = useState<Compra[]>([]);
 
   useEffect(() => { void financeiro.pedidos.anexos(p.id).then(setAnexos); }, [financeiro, p.id, versao]);
+  useEffect(() => {
+    if (!p.fatura) return;
+    const ids = new Set(p.fatura.compras);
+    void financeiro.compras.lista().then((l) => setComprasFatura(l.filter((c) => ids.has(c.id)))).catch(() => setComprasFatura([]));
+  }, [financeiro, p.fatura, versao]);
 
   const nome = (lista: { id: string; nome?: string; apelido?: string }[], id?: string) => lista.find((x) => x.id === id)?.nome ?? lista.find((x) => x.id === id)?.apelido ?? '—';
   const agir = async (fn: () => Promise<unknown>, ok: string, fechar = true) => {
@@ -299,14 +330,35 @@ function PedidoDetalhe({ financeiro, cad, servicoFotos, hoje, pedido: p, versao,
         {linha('Boleto', p.boleto)}
         {linha('Reembolso de', p.reembolsoDe)}
         {linha('Vencimento', p.vencimento ? `${dataBR(p.vencimento)}${NOME_PRAZO[prazo] ? ` (${NOME_PRAZO[prazo].toLowerCase()})` : ''}` : undefined)}
-        {linha('Centro de custo', nome(cad.centros, p.centroId))}
-        {linha('Frente', p.frenteId ? nome(cad.frentes, p.frenteId) : undefined)}
-        {linha('Tipo de despesa', p.tipoDespesaId ? nome(cad.tipos, p.tipoDespesaId) : undefined)}
+        {!p.fatura && linha('Centro de custo', nome(cad.centros, p.centroId))}
+        {!p.fatura && linha('Frente', p.frenteId ? nome(cad.frentes, p.frenteId) : undefined)}
+        {!p.fatura && linha('Tipo de despesa', p.tipoDespesaId ? nome(cad.tipos, p.tipoDespesaId) : undefined)}
+        {p.fatura && linha('Soma das compras', reais(p.fatura.soma))}
+        {p.fatura && linha('Diferença explicada', p.fatura.justificativa)}
         {linha('Nota fiscal', p.nota?.numero ? `Nº ${p.nota.numero}` : undefined)}
         {linha('Aprovação', p.aprovador === 'admin' ? 'Administrador' : p.aprovador === 'pagador' ? 'Pagador ou administrador' : 'Não precisa')}
         {p.pagamento && linha('Pago', `${reais(p.pagamento.valor)} em ${dataBR(p.pagamento.data)} · ${nome(cad.empresas, p.pagamento.empresaId)} / ${nome(cad.contas, p.pagamento.contaId)}`)}
         {linha('Obs. do pagamento', p.pagamento?.observacao)}
       </Cartao>
+
+      {p.fatura && (
+        <Cartao>
+          <Text style={estilos.secao}>Divisão por centro de custo</Text>
+          {divisaoPorCentro(comprasFatura, cad).map((d) => (
+            <View key={d.chave} style={estilos.linha}>
+              <Text testID={`divisao-${d.chave}`} style={[estilos.titulo, { flex: 1 }]}>{d.nome}</Text>
+              <Text style={estilos.valor}>{reais(d.total)}</Text>
+            </View>
+          ))}
+          <Text style={estilos.secao}>Compras da fatura</Text>
+          {comprasFatura.map((c) => (
+            <View key={c.id} style={{ gap: 2, borderTopWidth: 1, borderTopColor: cores.borda, paddingTop: 6 }}>
+              <View style={estilos.linha}><Text style={[estilos.titulo, { flex: 1 }]}>{c.descricao}</Text><Text style={estilos.valor}>{reais(c.valor)}</Text></View>
+              <Text style={estilos.subtitulo}>{dataBR(c.data)} · {nome(cad.centros, c.centroId)}{c.frenteId ? ` · ${nome(cad.frentes, c.frenteId)}` : ''} · {c.criado.nome}</Text>
+            </View>
+          ))}
+        </Cartao>
+      )}
 
       {anexos.length > 0 && (
         <Cartao>
@@ -322,7 +374,15 @@ function PedidoDetalhe({ financeiro, cad, servicoFotos, hoje, pedido: p, versao,
         ))}
       </Cartao>
 
-      {podeConferir && (
+      {podeConferir && p.fatura && (
+        <Cartao>
+          <Text style={estilos.secao}>Conferir a fatura</Text>
+          <Text style={estilos.subtitulo}>Confira o valor e o boleto com a fatura da loja. O custo já está dividido por centro de custo e frente nas compras acima.</Text>
+          <Botao testID="conferir" titulo={p.aprovador === 'admin' && !admin ? 'Conferir e enviar para aprovação' : 'Conferir e liberar'}
+            onPress={() => void agir(() => financeiro.pedidos.conferir(p.id), 'Pedido conferido.')} />
+        </Cartao>
+      )}
+      {podeConferir && !p.fatura && (
         <Cartao>
           <Text style={estilos.secao}>Conferir e classificar</Text>
           <Seletor testID="conf-centro" rotulo="Centro de custo" valor={centroId} opcoes={cad.centros.map((c) => ({ id: c.id, titulo: c.nome }))} onEscolher={(id) => { setCentroId(id); setFrenteId(id === p.centroId ? p.frenteId : null); }} />

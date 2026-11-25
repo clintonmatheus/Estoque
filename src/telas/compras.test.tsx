@@ -55,6 +55,14 @@ describe('Compras a faturar na tela', () => {
     expect(await screen.findByText(/Fatura enviada no pedido P-/)).toBeTruthy();
     const [p] = await pag.pedidos.lista();
     expect(p).toMatchObject({ tipo: 'boleto', valor: 1234.56, fatura: { soma: 450, justificativa: 'Outras compras sem lançamento' } });
+    expect(p.centroId).toBeUndefined();
+    // o pedido da fatura não mostra um centro de custo: mostra a divisão por centro, vinda das compras
+    await fireEvent.press(await screen.findByTestId('tela-pedidos'));
+    await fireEvent.press(await screen.findByTestId(`pedido-${p.id}`));
+    expect(await screen.findByText('Divisão por centro de custo')).toBeTruthy();
+    expect(screen.getByTestId(`divisao-${c.centro.id}`)).toBeTruthy();
+    expect(screen.queryByText('Centro de custo')).toBeNull();
+    expect(screen.queryByTestId('conf-centro')).toBeNull();
   });
 
   it('almoxarife sem perfil no financeiro lança compra pelo menu Mais', async () => {

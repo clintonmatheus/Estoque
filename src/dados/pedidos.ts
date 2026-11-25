@@ -15,7 +15,8 @@ export interface NovoPedido {
   tipo: TipoPedido;
   descricao: string;
   valor: number;
-  centroId: string;
+  /** Obrigatório, exceto na fatura semanal (o custo vem das compras). */
+  centroId?: string;
   frenteId?: string;
   tipoDespesaId?: string;
   fornecedorId?: string;
@@ -27,7 +28,7 @@ export interface NovoPedido {
   urgente?: boolean;
   nota?: Pedido['nota'];
   reembolsoDe?: string;
-  /** Fatura semanal: ids das compras que este pedido paga (o centro de custo vem da maior compra). */
+  /** Fatura semanal: ids das compras que este pedido paga (sem centro de custo próprio: cada compra tem o seu). */
   fatura?: { compras: string[]; justificativa?: string };
 }
 
@@ -77,12 +78,14 @@ export class Pedidos {
     const descricao = texto(n.descricao);
     if (!descricao) throw new Error('Descreva o pagamento');
     if (!(n.valor > 0) || !Number.isFinite(n.valor)) throw new Error('Informe o valor do pedido');
-    const centro = (await this.a.centros.obter(n.centroId));
-    if (!centro) throw new Error('Escolha o centro de custo');
-    if (!centro.ativo) throw new Error(`${centro.nome} está parado: não recebe novos pedidos`);
-    if (n.frenteId) {
-      const f = await this.a.locais.obter(n.frenteId);
-      if (!f || f.centroId !== n.centroId) throw new Error('A frente de serviço não pertence a esse centro de custo');
+    if (!n.fatura) {
+      const centro = n.centroId ? await this.a.centros.obter(n.centroId) : undefined;
+      if (!centro) throw new Error('Escolha o centro de custo');
+      if (!centro.ativo) throw new Error(`${centro.nome} está parado: não recebe novos pedidos`);
+      if (n.frenteId) {
+        const f = await this.a.locais.obter(n.frenteId);
+        if (!f || f.centroId !== n.centroId) throw new Error('A frente de serviço não pertence a esse centro de custo');
+      }
     }
     if (n.tipoDespesaId && !(await this.a.tipos_despesa.obter(n.tipoDespesaId))) throw new Error('Tipo de despesa não encontrado');
     const fornecedor = n.fornecedorId ? await this.a.fornecedores.obter(n.fornecedorId) : undefined;
@@ -117,12 +120,12 @@ export class Pedidos {
     if (atual && !podeEditar(this.usuario, atual)) throw new Error('Este pedido já foi conferido ou não é seu: não dá para editar');
     const id = n.id ?? this.o.novoId();
     const fatura = n.fatura ? await this.resolverFatura(n, id) : undefined;
-    if (fatura) n = { ...n, centroId: fatura.centroId, frenteId: undefined, tipoDespesaId: n.tipoDespesaId };
+    if (fatura) { const { centroId: _c, frenteId: _f, tipoDespesaId: _t, ...resto } = n; n = resto; }
     const dados = await this.validar(n);
     const agora = this.o.agora();
     const base: Omit<Pedido, 'historico' | 'status' | 'criado'> = {
       id, codigo: atual?.codigo ?? this.codigo(id, agora), tipo: n.tipo, valor: n.valor,
-      centroId: n.centroId, ...(n.frenteId ? { frenteId: n.frenteId } : {}), ...(n.tipoDespesaId ? { tipoDespesaId: n.tipoDespesaId } : {}),
+      ...(n.centroId ? { centroId: n.centroId } : {}), ...(n.frenteId ? { frenteId: n.frenteId } : {}), ...(n.tipoDespesaId ? { tipoDespesaId: n.tipoDespesaId } : {}),
       ...(n.fornecedorId ? { fornecedorId: n.fornecedorId } : {}), ...dados,
       ...(n.urgente ? { urgente: true } : {}), ...(n.nota && Object.keys(n.nota).length ? { nota: n.nota } : {}),
       ...(texto(n.reembolsoDe) ? { reembolsoDe: texto(n.reembolsoDe) } : {}),
@@ -167,10 +170,7 @@ export class Pedidos {
     if (Math.abs(soma - n.valor) > 0.005 && !justificativa) {
       throw new Error(`O valor da fatura (R$ ${n.valor.toFixed(2).replace('.', ',')}) é diferente da soma das compras (R$ ${soma.toFixed(2).replace('.', ',')}): explique a diferença`);
     }
-    const porCentro = new Map<string, number>();
-    for (const c of compras) porCentro.set(c.centroId, (porCentro.get(c.centroId) ?? 0) + c.valor);
-    const centroId = [...porCentro].sort((a, b) => b[1] - a[1])[0][0];
-    return { centroId, compras: ids, dados: { compras: ids, soma, ...(justificativa ? { justificativa } : {}) } };
+    return { compras: ids, dados: { compras: ids, soma, ...(justificativa ? { justificativa } : {}) } };
   }
 
   private async prenderCompras(ids: string[], pedidoId: string) {
@@ -221,8 +221,15 @@ export class Pedidos {
     const p = await this.carregar(id);
     if (p.status !== 'enviado') throw new Error('Só se confere pedido que está aguardando conferência');
     this.naoEhMeuPedidoDePagador(p);
+    if (p.fatura) {
+      // Fatura: o custo está nas compras; a conferência só valida e libera.
+      const eventosF: { acao: AcaoPedido }[] = [{ acao: 'conferiu' }];
+      if (p.aprovador === 'nenhum') return this.mudar(p, 'pronto', eventosF);
+      if (podeAprovar(this.usuario, p.aprovador)) return this.mudar(p, 'pronto', [...eventosF, { acao: 'aprovou' }]);
+      return this.mudar(p, 'aprovacao', eventosF);
+    }
     const centroId = ajustes.centroId ?? p.centroId;
-    if (!(await this.a.centros.obter(centroId))) throw new Error('Centro de custo não encontrado');
+    if (!centroId || !(await this.a.centros.obter(centroId))) throw new Error('Centro de custo não encontrado');
     const frenteId = ajustes.frenteId === null ? undefined : ajustes.frenteId ?? (centroId === p.centroId ? p.frenteId : undefined);
     if (frenteId && (await this.a.locais.obter(frenteId))?.centroId !== centroId) throw new Error('A frente de serviço não pertence a esse centro de custo');
     const tipoDespesaId = ajustes.tipoDespesaId ?? p.tipoDespesaId;

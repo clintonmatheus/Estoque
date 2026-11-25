@@ -34,15 +34,17 @@ describe('compras a faturar e fatura semanal', () => {
     expect((await c.enc.compras.cancelar(a.id)).status).toBe('cancelada');
   });
 
-  it('fecha a fatura em um pedido: soma confere, diferença exige justificativa, centro é o da maior compra', async () => {
+  it('fecha a fatura em um pedido: soma confere, diferença exige justificativa, sem centro de custo próprio', async () => {
     const c = await cenario();
     const m = (valor: number, centroId: string) => c.enc.compras.lancar({ fornecedorId: c.loja.id, descricao: 'Material', valor, centroId }, NOTA);
     const x = await m(900, c.rmg.id);
     const y = await m(334.56, c.sms.id);
-    const fatura = { tipo: 'boleto' as const, descricao: 'Fatura Casa do Construtor', valor: 1234.56, centroId: c.sms.id, fornecedorId: c.loja.id, boleto: BOLETO };
+    const fatura = { tipo: 'boleto' as const, descricao: 'Fatura Casa do Construtor', valor: 1234.56, fornecedorId: c.loja.id, boleto: BOLETO };
     await expect(c.enc.pedidos.solicitar({ ...fatura, fatura: { compras: [x.id, y.id] } })).rejects.toThrow('só o pagador ou o administrador');
     const p = await c.pag.pedidos.solicitar({ ...fatura, fatura: { compras: [x.id, y.id] } });
-    expect(p).toMatchObject({ status: 'enviado', centroId: c.rmg.id, aprovador: 'admin', fatura: { soma: 1234.56, compras: [x.id, y.id] } });
+    expect(p).toMatchObject({ status: 'enviado', aprovador: 'admin', fatura: { soma: 1234.56, compras: [x.id, y.id] } });
+    expect(p.centroId).toBeUndefined(); // o custo fica em cada compra (RMG e SMS)
+    expect((await c.pag.pedidos.lista())[0].centroId).toBeUndefined();
     expect((await c.pag.compras.lista()).every((k) => k.status === 'em_fatura' && k.pedidoId === p.id)).toBe(true);
     // a mesma compra não entra em duas faturas
     await expect(c.adm.pedidos.solicitar({ ...fatura, descricao: 'Outra', fatura: { compras: [x.id] }, valor: 900, boleto: undefined, tipo: 'pix', chavePix: '05948553000275' })).rejects.toThrow('outra fatura');
@@ -51,7 +53,7 @@ describe('compras a faturar e fatura semanal', () => {
   it('diferença entre a fatura e a soma pede justificativa; cancelar o pedido devolve as compras à lista aberta', async () => {
     const c = await cenario();
     const k = await c.enc.compras.lancar({ fornecedorId: c.loja.id, descricao: 'Tinta', valor: 1200, centroId: c.rmg.id }, NOTA);
-    const base = { tipo: 'boleto' as const, descricao: 'Fatura', valor: 1234.56, centroId: c.rmg.id, fornecedorId: c.loja.id, boleto: BOLETO, fatura: { compras: [k.id] } };
+    const base = { tipo: 'boleto' as const, descricao: 'Fatura', valor: 1234.56, fornecedorId: c.loja.id, boleto: BOLETO, fatura: { compras: [k.id] } };
     await expect(c.adm.pedidos.solicitar(base)).rejects.toThrow('explique a diferença');
     const p = await c.adm.pedidos.solicitar({ ...base, fatura: { compras: [k.id], justificativa: 'Frete da loja' } });
     expect(p.fatura).toMatchObject({ soma: 1200, justificativa: 'Frete da loja' });

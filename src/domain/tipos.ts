@@ -349,7 +349,7 @@ export interface PagamentoPedido {
   observacao?: string;
 }
 
-/** Fatura de loja: soma das compras lançadas, valor cobrado e a explicação da diferença. */
+/** Fatura de loja: um pagamento só, que reúne várias compras (cada uma com seu centro e frente). Soma delas e explicação da diferença. */
 export interface FaturaPedido { compras: string[]; soma: number; justificativa?: string }
 
 export interface Pedido {
@@ -360,8 +360,8 @@ export interface Pedido {
   status: StatusPedido;
   descricao: string;
   valor: number;
-  /** Obrigatório: a quem o custo pertence. */
-  centroId: string;
+  /** A quem o custo pertence. Obrigatório, exceto na fatura semanal: ali cada compra tem o seu centro e a sua frente. */
+  centroId?: string;
   frenteId?: string;
   tipoDespesaId?: string;
   fornecedorId?: string;
@@ -378,7 +378,7 @@ export interface Pedido {
   nota?: NotaFiscalPedido;
   /** Reembolso: quem gastou o dinheiro. */
   reembolsoDe?: string;
-  /** Fatura semanal de loja: as compras que o pedido paga (o centro de custo do pedido é o da maior compra). */
+  /** Fatura semanal de loja: as compras que o pedido paga. Não tem centro de custo próprio: o custo fica nas compras. */
   fatura?: FaturaPedido;
   pagamento?: PagamentoPedido;
   historico: EventoPedido[];
