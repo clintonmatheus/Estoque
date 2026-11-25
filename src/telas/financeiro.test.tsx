@@ -47,7 +47,7 @@ describe('Financeiro na tela', () => {
     expect(screen.queryByTestId('pilar-estoque')).toBeNull();
     await fireEvent.press(screen.getByTestId('pilar-conta'));
     expect(screen.getByTestId('acesso-pagamentos')).toHaveTextContent('faz pedidos, confere e paga');
-    expect(screen.getByTestId('acesso-financeiro')).toHaveTextContent('sem acesso');
+    expect(screen.queryByTestId('acesso-financeiro')).toBeNull();
   });
 
   it('administrador só do financeiro importa a planilha de cadastros pela tela', async () => {

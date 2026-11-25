@@ -10,7 +10,7 @@
 
 -- 1. Perfis
 alter table public.perfis drop constraint if exists perfis_papel_check;
-alter table public.perfis add constraint perfis_papel_check check (papel in ('admin', 'almoxarife', 'controle', 'consultor', 'nenhum'));
+alter table public.perfis add constraint perfis_papel_check check (papel in ('admin', 'almoxarife', 'controle', 'consultor', 'saldos', 'nenhum'));
 alter table public.perfis alter column papel set default 'nenhum';
 alter table public.perfis add column if not exists paga boolean not null default false;
 

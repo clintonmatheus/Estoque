@@ -27,6 +27,8 @@ saídas para as frentes de serviço, devoluções, transferências, inventário 
 
 **Atualização (Financeiro, etapa 1):** rode `supabase/006_financeiro_cadastros.sql` e depois `supabase/006b_perfis_financeiro.sql` (troque os e-mails).
 
+**Atualização (saldos para solicitantes):** rode `supabase/011_saldos_e_login.sql` (troque o e-mail do Augusto); ele também remove o login construtorapassosrn@gmail.com.
+
 **Atualização (três pilares e perfis):** rode `supabase/010_pilares.sql` e depois `supabase/010b_perfis_pilares.sql` (troque os e-mails do Daniel e do Augusto). Gere o APK novo e publique a versão web.
 
 **Atualização (Financeiro, etapa 2 — pedidos de pagamento e fatura semanal):** rode, nesta ordem, `supabase/007_pedidos.sql` e `supabase/008_compras.sql` (depois da 006). Gere o APK novo (inclui a câmera para ler boletos) e publique a versão web.
@@ -100,7 +102,7 @@ O rodapé mostra só os pilares a que a pessoa tem acesso: **Estoque** (materiai
 | Arthur, Daniel | consultor: só consulta | admin: pede, confere, aprova | não | sim |
 | Marilia | almoxarife: tudo | solicitante: pede | — | não |
 | Joana | controle: EPI, ferramentas e locações (materiais só consulta) | pagador: pede, confere e paga | sim | não |
-| Caio, Augusto | nenhum | solicitante: pede | — | não |
+| Caio, Augusto | saldos: só os saldos do galpão (sem valores) | solicitante: pede | — | não |
 
 As mesmas regras valem no servidor (RLS): o controle só grava itens/lançamentos de EPI, funcionários, ferramentas e locações; o consultor só lê; só quem `paga` marca um pedido como pago; arquivos de pedidos e compras ficam visíveis só para pagador/administrador e para quem os lançou. Login novo começa sem acesso (`nenhum`) até o administrador definir o perfil.
 

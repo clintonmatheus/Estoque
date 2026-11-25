@@ -3,9 +3,10 @@
  * - admin e almoxarife: fazem tudo;
  * - controle: EPI, ferramentas e locações (lança, entrega, cadastra); materiais só consulta;
  * - consultor: vê tudo do estoque, sem lançar;
+ * - saldos: só os saldos dos materiais do galpão, sem valores (online);
  * - nenhum: não usa o estoque (só pagamentos, por exemplo).
  */
-export type Papel = 'admin' | 'almoxarife' | 'controle' | 'consultor' | 'nenhum';
+export type Papel = 'admin' | 'almoxarife' | 'controle' | 'consultor' | 'saldos' | 'nenhum';
 
 /** Papel no pilar Pagamentos (e, para o admin, também o pilar Financeiro). */
 export type PapelFinanceiro = 'admin' | 'pagador' | 'solicitante';
@@ -21,7 +22,9 @@ export interface Usuario {
 
 // ---- Pilar Estoque/Controle ----
 /** Vê o estoque (saldos, EPI, ferramentas, locações, histórico, relatórios). */
-export const veEstoque = (u: Usuario) => u.papel !== 'nenhum';
+export const veEstoque = (u: Usuario) => u.papel !== 'nenhum' && u.papel !== 'saldos';
+/** Só consulta os saldos do galpão (quantidades, sem valores), direto do servidor. */
+export const soSaldos = (u: Usuario) => u.papel === 'saldos';
 /** Lança e cadastra materiais (e todo o resto do estoque). */
 export const podeLancar = (u: Usuario) => u.papel === 'admin' || u.papel === 'almoxarife';
 /** Lança EPI, ferramentas e locações e cadastra funcionários. */

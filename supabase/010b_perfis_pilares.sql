@@ -2,7 +2,7 @@
 -- Quem ainda não tem login (Augusto e Daniel): crie antes em Authentication → Users → Add user (marque "Auto Confirm User")
 -- e troque EMAIL_DO_AUGUSTO e EMAIL_DO_DANIEL pelos e-mails reais. Linhas cujo e-mail ou nome não existe são ignoradas.
 --
--- papel (estoque): admin, almoxarife, controle (EPI/ferramentas/locações), consultor (só vê), nenhum
+-- papel (estoque): admin, almoxarife, controle (EPI/ferramentas/locações), consultor (vê tudo), saldos (só saldos do galpão), nenhum
 -- financeiro (pagamentos): admin (aprova e vê o Financeiro), pagador (confere e paga), solicitante (pede)
 -- paga: true para quem registra pagamentos (o pagador já paga; entre os administradores, só o Clinton)
 
@@ -11,9 +11,9 @@ update public.perfis p
    set nome = v.nome, papel = v.papel, financeiro = v.financeiro, paga = v.paga
   from (values
     ('joanad.moura@hotmail.com', 'Joana',   'controle',  'pagador',     true),
-    ('caioosouza6@gmail.com',    'Caio',    'nenhum',    'solicitante', false),
+    ('caioosouza6@gmail.com',    'Caio',    'saldos',    'solicitante', false),
     ('EMAIL_DO_DANIEL',          'Daniel',  'consultor', 'admin',       false),
-    ('EMAIL_DO_AUGUSTO',         'Augusto', 'nenhum',    'solicitante', false)
+    ('EMAIL_DO_AUGUSTO',         'Augusto', 'saldos',    'solicitante', false)
   ) as v (email, nome, papel, financeiro, paga)
   join auth.users u on lower(u.email) = lower(v.email)
  where p.id = u.id;

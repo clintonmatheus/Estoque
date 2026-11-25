@@ -8,7 +8,7 @@ import { emPrazo, posicoesDoBem, situacaoLocacao, totalDoBem, divergenciasDeCobr
 import { epiParaTrocar } from '../domain/epi';
 import { podeAprovar } from '../domain/pedidos';
 import {
-  ehEpi, operaControle, podeConferir, podeLancar, podePagar, temFinanceiro, veEstoque, veFinanceiro,
+  ehEpi, operaControle, podeConferir, soSaldos, podeLancar, podePagar, temFinanceiro, veEstoque, veFinanceiro,
   type Item, type Movimento, type Usuario,
 } from '../domain/tipos';
 import type { ServicoFotos } from '../fotos/servico';
@@ -16,6 +16,7 @@ import type { EstadoSync } from '../sync/agendador';
 import { BarraUsuario, textoSync } from './BarraUsuario';
 import { Cabecalho } from './Cabecalho';
 import { CadastrosTela } from './CadastrosTela';
+import { ConsultaTela } from './ConsultaTela';
 import { Cartao, Chips } from './componentes';
 import { ComprasTela } from './ComprasTela';
 import { EpiTela } from './EpiTela';
@@ -64,7 +65,7 @@ interface Props {
 /** Pilares que esta pessoa vê, na ordem do rodapé. */
 export function pilaresDe(u: Usuario, tem: { estoque: boolean; financeiro: boolean }): Pilar[] {
   const lista: Pilar[] = [];
-  if (veEstoque(u) && tem.estoque) lista.push('estoque');
+  if ((veEstoque(u) && tem.estoque) || soSaldos(u)) lista.push('estoque');
   if (temFinanceiro(u) && tem.financeiro) lista.push('pagamentos');
   if (veFinanceiro(u) && tem.financeiro) lista.push('financeiro');
   lista.push('conta');
@@ -96,13 +97,14 @@ export function Raiz(p: Props) {
     }).catch(() => undefined);
   }, [financeiro, usuario, v]);
 
-  const nomePilar = atual === 'estoque' && titulo ? titulo.texto : PILARES[atual].titulo;
+  const nomePilar = atual === 'estoque' && soSaldos(usuario) ? 'Saldos do galpão' : atual === 'estoque' && titulo ? titulo.texto : PILARES[atual].titulo;
   return (
     <View style={estilos.tela}>
       <Cabecalho titulo={atual === 'pagamentos' ? 'Pagamentos' : nomePilar} subtitulo={`${usuario.nome} · ${textoSync(estadoSync)}`}
         rotuloVoltar="Mais" onVoltar={atual === 'estoque' ? titulo?.voltar : undefined} />
       <View style={{ flex: 1 }}>
-        {atual === 'estoque' && estoque && (
+        {atual === 'estoque' && soSaldos(usuario) && <ConsultaTela carregar={p.carregarSaldos} hoje={hoje} versao={v} />}
+        {atual === 'estoque' && !soSaldos(usuario) && estoque && (
           <PilarEstoque {...p} estoque={estoque} versao={v} onAlterou={alterou} onTitulo={setTitulo} onAvisos={(n) => setAvisos((a) => (a.estoque === n ? a : { ...a, estoque: n }))} />
         )}
         {atual === 'pagamentos' && financeiro && <PilarPagamentos financeiro={financeiro} servicoFotos={p.servicoFotos} hoje={hoje} versao={v} onAlterou={alterou} />}
@@ -229,8 +231,8 @@ function PilarEstoque({ usuario, estoque, servicoFotos, saida, hoje, agora, vers
         {secao === 'mais' && mais === 'inventario' && materiais && <InventarioTela estoque={estoque} hoje={hoje} versao={versao} onConcluido={onAlterou} />}
         {secao === 'mais' && mais === 'menu' && (
           <ScrollView contentContainerStyle={estilos.conteudo}>
-            {leitura && <Text testID="aviso-leitura" style={estilos.subtitulo}>Você consulta o estoque: saldos, EPI, ferramentas, locações, histórico e relatórios, sem lançar.</Text>}
-            {!materiais && controle && <Text testID="aviso-controle" style={estilos.subtitulo}>Você cuida de EPI, ferramentas e locações. Materiais: só consulta (lançamentos com o almoxarifado).</Text>}
+            {leitura && <Text testID="aviso-leitura" style={estilos.subtitulo}>Consulte saldos, EPI, ferramentas, locações, histórico e relatórios.</Text>}
+            {!materiais && controle && <Text testID="aviso-controle" style={estilos.subtitulo}>Você cuida de EPI, ferramentas e locações.</Text>}
             <ItemMenu testID="abrir-historico" icone="list-outline" titulo="Histórico" sub={materiais ? 'Lançamentos de material, correções e cancelamentos' : controle ? 'Lançamentos (você corrige os de EPI)' : 'Lançamentos de material e de EPI'} onPress={() => setMais('historico')} />
             <ItemMenu testID="abrir-relatorios" icone="document-text-outline" titulo="Relatórios" sub="Saldo, gastos por obra, equipamentos e EPI (PDF e Excel)" onPress={() => setMais('relatorios')} />
             {controle && <ItemMenu testID="abrir-cadastros" icone="pricetags-outline" titulo="Cadastros" sub={materiais ? 'Itens, frentes, funcionários e EPI (itens e funcionários)' : 'Itens de EPI e funcionários'} onPress={() => setMais('cadastros')} />}
@@ -268,14 +270,14 @@ function PilarPagamentos({ financeiro, servicoFotos, hoje, versao, onAlterou }: 
 // Conta: quem é, o que pode fazer, sincronização e sair
 
 const NOME_ESTOQUE: Record<Usuario['papel'], string> = {
-  admin: 'administrador (tudo)', almoxarife: 'almoxarife (tudo)', controle: 'EPI, ferramentas e locações (materiais: consulta)', consultor: 'consulta', nenhum: 'sem acesso',
+  admin: 'administrador (tudo)', almoxarife: 'almoxarife (tudo)', controle: 'EPI, ferramentas e locações', consultor: 'consulta', saldos: 'saldos do galpão', nenhum: 'sem acesso',
 };
 
 function ContaTela({ usuario, estadoSync, onSincronizar, onSair, semAcesso }: Props & { semAcesso: boolean }) {
   const pagamentos = !usuario.financeiro ? 'sem acesso'
     : usuario.financeiro === 'solicitante' ? 'faz pedidos'
       : usuario.financeiro === 'pagador' ? 'faz pedidos, confere e paga'
-        : `faz pedidos, confere e aprova${podePagar(usuario) ? ' e paga' : ' (não paga)'}`;
+        : `faz pedidos, confere e aprova${podePagar(usuario) ? ' e paga' : ''}`;
   return (
     <ScrollView contentContainerStyle={estilos.conteudo}>
       <BarraUsuario nome={usuario.nome} estado={estadoSync} onSincronizar={onSincronizar} onSair={onSair} />
@@ -287,9 +289,9 @@ function ContaTela({ usuario, estadoSync, onSincronizar, onSair, semAcesso }: Pr
       )}
       <Cartao gap={6}>
         <Text style={estilos.secao}>Seus acessos</Text>
-        <Linha rotulo="Estoque" valor={NOME_ESTOQUE[usuario.papel]} testID="acesso-estoque" />
-        <Linha rotulo="Pagamentos" valor={pagamentos} testID="acesso-pagamentos" />
-        <Linha rotulo="Financeiro" valor={veFinanceiro(usuario) ? 'cadastros e custos' : 'sem acesso'} testID="acesso-financeiro" />
+        {usuario.papel !== 'nenhum' && <Linha rotulo="Estoque" valor={NOME_ESTOQUE[usuario.papel]} testID="acesso-estoque" />}
+        {usuario.financeiro && <Linha rotulo="Pagamentos" valor={pagamentos} testID="acesso-pagamentos" />}
+        {veFinanceiro(usuario) && <Linha rotulo="Financeiro" valor="cadastros e custos" testID="acesso-financeiro" />}
       </Cartao>
     </ScrollView>
   );

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Estoque } from '../dados/estoque';
-import { ARTHUR, CLINTON, estoqueComCadastros, estoqueDeTeste, JOANA } from '../testes/fabricas';
+import { ARTHUR, CLINTON, estoqueComCadastros, estoqueDeTeste, financeiroDeTeste, JOANA } from '../testes/fabricas';
 import { Raiz } from './Raiz';
 
 const fotos = { tirarFoto: async () => undefined, escolherDaGaleria: async () => undefined };
@@ -49,6 +49,20 @@ describe('Raiz', () => {
     expect(await screen.findByTestId('aba-itens-epi')).toBeTruthy();
     expect(screen.queryByTestId('aba-itens')).toBeNull();
     expect(screen.queryByTestId('aba-locais')).toBeNull();
+  });
+
+  it('solicitante com acesso aos saldos (Caio, Augusto) vê os saldos do galpão, sem valores, e os pedidos', async () => {
+    const carregar = jest.fn(async () => [{ itemId: 't', nome: 'TINTA', unidade: 'lata', estoqueMinimo: 2, saldo: 1 }]);
+    const caio = { id: 'u-caio', nome: 'Caio', papel: 'saldos' as const, financeiro: 'solicitante' as const };
+    const fin = financeiroDeTeste(caio).financeiro;
+    await render(<Raiz {...base} usuario={caio} financeiro={fin} carregarSaldos={carregar} />);
+    expect(screen.getByTestId('pilar-pagamentos')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('pilar-estoque'));
+    expect(await screen.findByText('TINTA')).toBeTruthy();
+    expect(screen.getByText('Saldos do galpão')).toBeTruthy();
+    expect(screen.queryByText(/R\$/)).toBeNull();
+    expect(screen.queryByTestId('aba-lancar')).toBeNull();
+    expect(screen.queryByTestId('aba-mais')).toBeNull();
   });
 
   it('quem não tem acesso a nenhum pilar vê o aviso para pedir liberação', async () => {
