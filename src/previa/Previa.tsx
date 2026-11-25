@@ -106,10 +106,10 @@ export function Previa() {
   if (perfil === 'login') conteudo = <LoginTela entrar={async () => { throw new Error('Prévia'); }} onEntrou={() => {}} />;
   else {
     const usuario = perfil === 'consultor' ? ARTHUR : perfil === 'financeiro' ? CLINTON : perfil === 'pagador' ? PAGADORA : MARILIA;
-    const financeiro = usuario.financeiro ? new Financeiro(armazenamento, usuario, { agora: () => `${HOJE}T15:00:00.000Z`, novoId: () => `n${Date.now()}` }) : undefined;
+    const financeiro = usuario.financeiro || usuario.papel !== 'consultor' ? new Financeiro(armazenamento, usuario, { agora: () => `${HOJE}T15:00:00.000Z`, novoId: () => `n${Date.now()}` }) : undefined;
     conteudo = (
       <Raiz usuario={usuario} estoque={perfil === 'consultor' || perfil === 'pagador' ? undefined : estoque} financeiro={financeiro} carregarSaldos={saldos}
-        servicoFotos={{ tirarFoto: async () => undefined, escolherDaGaleria: async () => undefined }}
+        servicoFotos={{ tirarFoto: async () => undefined, escolherDaGaleria: async () => undefined, escolherDocumento: async () => ({ uri: 'file:///exemplo.pdf', nome: 'exemplo.pdf', formato: 'pdf' as const, bytes: new Uint8Array() }) }}
         saida={{ pdf: async () => {}, xlsx: async () => {} }} hoje={HOJE} agora={() => `${HOJE}T15:00:00.000Z`}
         estadoSync={{ sincronizando: false, recebidos: 0, ultimaEm: `${HOJE}T14:58:00.000Z` }}
         escolherPlanilha={async () => undefined} onSair={() => {}} onSincronizar={() => {}} />
