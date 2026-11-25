@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { CLINTON_FIN, ENCARREGADO, estoqueComCadastros, financeiroDeTeste, MARILIA, PAGADORA } from '../testes/fabricas';
+import { CLINTON_FIN, ENCARREGADO, estoqueComCadastros, financeiroDeTeste, MARILIA_SOL, PAGADORA } from '../testes/fabricas';
 import { Raiz } from './Raiz';
 
 const saida = { pdf: jest.fn(async () => {}), xlsx: jest.fn(async () => {}) };
@@ -65,15 +65,14 @@ describe('Compras a faturar na tela', () => {
     expect(screen.queryByTestId('conf-centro')).toBeNull();
   });
 
-  it('almoxarife sem perfil no financeiro lança compra pelo menu Mais', async () => {
-    const e = await estoqueComCadastros(MARILIA);
-    const c = await cadastros();
-    const fin = financeiroDeTeste(MARILIA, e.armazenamento);
-    void c;
-    await render(<Raiz {...base} usuario={MARILIA} estoque={e.estoque} financeiro={fin.financeiro} />);
-    await fireEvent.press(screen.getByTestId('aba-mais'));
-    expect(screen.queryByTestId('abrir-pedidos')).toBeNull();
-    await fireEvent.press(screen.getByTestId('abrir-compras'));
+  it('almoxarife que também pede pagamentos (Marilia) lança compra pelo pilar Pagamentos', async () => {
+    const e = await estoqueComCadastros(MARILIA_SOL);
+    const fin = financeiroDeTeste(MARILIA_SOL, e.armazenamento);
+    await render(<Raiz {...base} usuario={MARILIA_SOL} estoque={e.estoque} financeiro={fin.financeiro} />);
+    expect(screen.getByTestId('aba-lancar')).toBeTruthy();
+    expect(screen.queryByTestId('pilar-financeiro')).toBeNull();
+    await fireEvent.press(screen.getByTestId('pilar-pagamentos'));
+    await fireEvent.press(await screen.findByTestId('tela-compras'));
     expect(await screen.findByTestId('nova-compra')).toBeTruthy();
   });
 

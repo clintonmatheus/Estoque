@@ -52,7 +52,7 @@ function AppReal() {
       // O papel guardado pode estar desatualizado (ex.: alterado pelo administrador).
       if (atual) {
         const novo = await auth.atualizarPerfil();
-        if (novo && (novo.papel !== atual.papel || novo.nome !== atual.nome || novo.financeiro !== atual.financeiro)) setUsuario(novo);
+        if (novo && (novo.papel !== atual.papel || novo.nome !== atual.nome || novo.financeiro !== atual.financeiro || !!novo.paga !== !!atual.paga)) setUsuario(novo);
       }
     })();
   }, []);

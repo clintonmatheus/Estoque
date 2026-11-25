@@ -1,17 +1,46 @@
-export type Papel = 'admin' | 'almoxarife' | 'consultor';
+/**
+ * Papel no pilar Estoque/Controle (materiais, EPI, ferramentas e locações):
+ * - admin e almoxarife: fazem tudo;
+ * - controle: EPI, ferramentas e locações (lança, entrega, cadastra); materiais só consulta;
+ * - consultor: vê tudo do estoque, sem lançar;
+ * - nenhum: não usa o estoque (só pagamentos, por exemplo).
+ */
+export type Papel = 'admin' | 'almoxarife' | 'controle' | 'consultor' | 'nenhum';
 
-/** Perfil no módulo financeiro, independente do papel no galpão. */
+/** Papel no pilar Pagamentos (e, para o admin, também o pilar Financeiro). */
 export type PapelFinanceiro = 'admin' | 'pagador' | 'solicitante';
 
-export interface Usuario { id: string; nome: string; papel: Papel; financeiro?: PapelFinanceiro }
+export interface Usuario {
+  id: string;
+  nome: string;
+  papel: Papel;
+  financeiro?: PapelFinanceiro;
+  /** Registra pagamentos. O pagador sempre paga; o administrador só quando marcado. */
+  paga?: boolean;
+}
 
+// ---- Pilar Estoque/Controle ----
+/** Vê o estoque (saldos, EPI, ferramentas, locações, histórico, relatórios). */
+export const veEstoque = (u: Usuario) => u.papel !== 'nenhum';
+/** Lança e cadastra materiais (e todo o resto do estoque). */
+export const podeLancar = (u: Usuario) => u.papel === 'admin' || u.papel === 'almoxarife';
+/** Lança EPI, ferramentas e locações e cadastra funcionários. */
+export const operaControle = (u: Usuario) => podeLancar(u) || u.papel === 'controle';
+
+// ---- Pilar Pagamentos ----
 export const temFinanceiro = (u: Usuario) => !!u.financeiro;
 export const ehAdminFinanceiro = (u: Usuario) => u.financeiro === 'admin';
-/** Quem grava no aparelho e sincroniza (lança no galpão ou usa o financeiro). */
-export const usaSincronizacao = (u: Usuario) => podeLancar(u) || temFinanceiro(u);
+/** Confere pedidos, vê todos e fecha faturas: pagador e administrador. */
+export const podeConferir = (u: Usuario) => u.financeiro === 'admin' || u.financeiro === 'pagador';
+/** Registra o pagamento: o pagador e o administrador marcado como "paga". */
+export const podePagar = (u: Usuario) => u.financeiro === 'pagador' || (u.financeiro === 'admin' && !!u.paga);
 
-/** Administrador e almoxarife lançam movimentos e veem valores; consultor só vê saldos. */
-export const podeLancar = (u: Usuario) => u.papel === 'admin' || u.papel === 'almoxarife';
+// ---- Pilar Financeiro ----
+/** Cadastros do financeiro, custos e (na etapa 3) livro de custos e conciliação: só administradores. */
+export const veFinanceiro = ehAdminFinanceiro;
+
+/** Quem grava no aparelho e sincroniza. */
+export const usaSincronizacao = (u: Usuario) => veEstoque(u) || temFinanceiro(u);
 
 /** Quem fez e quando (ISO UTC). */
 export interface Autoria { id: string; nome: string; em: string }

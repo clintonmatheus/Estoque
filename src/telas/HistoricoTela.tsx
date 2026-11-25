@@ -9,14 +9,16 @@ import { NOME_TIPO } from '../relatorios/relatorios';
 import { Botao, Campo, Cartao, Chips, Mensagem, Seletor } from './componentes';
 import { cores, estilos } from './estilos';
 
-interface Props { estoque: Estoque; versao?: number; onAlterou?: () => void }
+interface Props { estoque: Estoque; versao?: number; onAlterou?: () => void; /** Quais lançamentos esta pessoa pode editar ou cancelar (padrão: todos). */ podeAlterar?: (m: Movimento) => boolean }
 
 interface Grupo { id: string; tipo: TipoMovimento; data: string; criado: Autoria; linhas: Movimento[] }
 
 type Filtro = 'todos' | TipoMovimento;
 const quando = (a: Autoria) => `${a.nome} em ${formatarDataBR(a.em.slice(0, 10))} às ${horaLocal(a.em)}`;
 
-export function HistoricoTela({ estoque, versao = 0, onAlterou }: Props) {
+const TODOS = () => true;
+
+export function HistoricoTela({ estoque, versao = 0, onAlterou, podeAlterar = TODOS }: Props) {
   const [movs, setMovs] = useState<Movimento[]>([]);
   const [itens, setItens] = useState<Item[]>([]);
   const [locais, setLocais] = useState<Local[]>([]);
@@ -65,7 +67,7 @@ export function HistoricoTela({ estoque, versao = 0, onAlterou }: Props) {
     const grupo: Grupo | undefined = ls.length ? { id: aberto, tipo: ls[0].tipo, data: ls[0].data, criado: ls[0].criado, linhas: ls } : undefined;
     if (grupo) {
       return (
-        <DetalheLancamento estoque={estoque} grupo={grupo} itens={itens} locais={locais} funcionarios={funcs} posicao={posicao}
+        <DetalheLancamento estoque={estoque} podeAlterar={podeAlterar} grupo={grupo} itens={itens} locais={locais} funcionarios={funcs} posicao={posicao}
           onVoltar={() => setAberto(undefined)} onAlterou={() => { setRecarregar((n) => n + 1); onAlterou?.(); }} />
       );
     }
@@ -105,7 +107,8 @@ export function HistoricoTela({ estoque, versao = 0, onAlterou }: Props) {
   );
 }
 
-function DetalheLancamento({ estoque, grupo, itens, locais, funcionarios, posicao, onVoltar, onAlterou }: {
+function DetalheLancamento({ estoque, podeAlterar, grupo, itens, locais, funcionarios, posicao, onVoltar, onAlterou }: {
+  podeAlterar: (m: Movimento) => boolean;
   estoque: Estoque; grupo: Grupo; itens: Item[]; locais: Local[]; funcionarios: Funcionario[]; posicao?: Posicao;
   onVoltar: () => void; onAlterou: () => void;
 }) {
@@ -182,7 +185,7 @@ function DetalheLancamento({ estoque, grupo, itens, locais, funcionarios, posica
         {m0.funcionarioId && <Text style={estilos.subtitulo}>{`${grupo.tipo === 'saida' ? 'Retirou' : grupo.tipo === 'epi' ? 'Recebeu' : 'Devolveu'}: ${funcionarios.find((f) => f.id === m0.funcionarioId)?.nome ?? '—'}`}</Text>}
         {m0.observacao && <Text style={estilos.subtitulo}>{`Obs.: ${m0.observacao}`}</Text>}
         <Text style={estilos.subtitulo}>{`Lançado por ${quando(grupo.criado)}`}</Text>
-        {grupo.tipo !== 'ajuste' && !editandoCab && grupo.linhas.some((m) => !m.cancelado) && (
+        {grupo.tipo !== 'ajuste' && !editandoCab && grupo.linhas.some((m) => !m.cancelado) && grupo.linhas.every(podeAlterar) && (
           <Botao testID="editar-cabecalho" titulo="Editar dados do lançamento" secundario onPress={() => setEditandoCab(true)} />
         )}
         {editandoCab && (
@@ -237,7 +240,7 @@ function DetalheLancamento({ estoque, grupo, itens, locais, funcionarios, posica
             )}
             {m.alterado && <Text testID={`editado-${m.id}`} style={estilos.subtitulo}>{`Editado por ${quando(m.alterado)}`}</Text>}
             {m.cancelado && <Text style={{ color: cores.erro }}>{`Cancelado por ${quando(m.cancelado)} — ${m.cancelado.motivo}`}</Text>}
-            {!m.cancelado && linhaEditada !== m.id && cancelando !== m.id && (
+            {!m.cancelado && podeAlterar(m) && linhaEditada !== m.id && cancelando !== m.id && (
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <Botao testID={`editar-${m.id}`} titulo="Editar" secundario onPress={() => {
                   setLinhaEditada(m.id); setQtd(String(m.quantidade).replace('.', ',')); setCusto(String(m.custoUnitario ?? '').replace('.', ','));

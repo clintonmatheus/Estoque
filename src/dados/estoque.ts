@@ -3,7 +3,7 @@ import { formatarQuantidade } from '../domain/formato';
 import { ITENS_INICIAIS } from '../domain/itensIniciais';
 import { mesmaPosse, posicoesDoBem, problemasDeBens, totalDoBem } from '../domain/bens';
 import { cpfValido } from '../domain/nomes';
-import { ehEpi, grupoDoFuncionario, podeLancar, type GrupoFuncionario, type Anexo, type Autoria, type Bem, type Funcionario, type Item, type Local, type Locacao, type Movimento, type MotivoSaidaBem, type MovimentoBem, type Posse, type TipoMovimento, type Usuario } from '../domain/tipos';
+import { ehEpi, grupoDoFuncionario, operaControle, podeLancar, type GrupoFuncionario, type Anexo, type Autoria, type Bem, type Funcionario, type Item, type Local, type Locacao, type Movimento, type MotivoSaidaBem, type MovimentoBem, type Posse, type TipoMovimento, type Usuario } from '../domain/tipos';
 import { TABELAS, type Armazenamento, type Tabela } from '../storage/contrato';
 import { criarArmazenamentoMemoria } from '../storage/memoria';
 
@@ -64,7 +64,20 @@ export class Estoque {
 
   private autoria(): Autoria { return { id: this.usuario.id, nome: this.usuario.nome, em: this.o.agora() }; }
 
+  /** Materiais (e tudo o mais): administrador e almoxarife. */
   private exigirPermissao() { if (!podeLancar(this.usuario)) throw new Error('Sem permissão'); }
+  /** EPI, ferramentas, locações e funcionários: também o controle. */
+  private exigirControle() { if (!operaControle(this.usuario)) throw new Error('Sem permissão'); }
+  /** O controle movimenta só itens de EPI; materiais ficam com o almoxarifado. */
+  private async exigirItens(itemIds: string[]) {
+    if (podeLancar(this.usuario)) return;
+    this.exigirControle();
+    const itens = await this.a.itens.listar();
+    for (const id of new Set(itemIds)) {
+      const i = itens.find((x) => x.id === id);
+      if (!i || !ehEpi(i)) throw new Error('Sem permissão: você movimenta só EPI, ferramentas e locações; materiais são com o almoxarifado');
+    }
+  }
 
   private async gravar<T extends { id: string }>(tabela: Tabela, doc: T): Promise<T> {
     await (this.a[tabela] as unknown as { salvar(d: T): Promise<void> }).salvar(doc);
@@ -100,7 +113,11 @@ export class Estoque {
 
   // ---------- Cadastros ----------
   async salvarItem(n: NovoItem): Promise<Item> {
-    this.exigirPermissao();
+    if (!podeLancar(this.usuario)) {
+      this.exigirControle();
+      const antigo = n.id ? await this.a.itens.obter(n.id) : undefined;
+      if (!ehEpi(n) || (antigo && !ehEpi(antigo))) throw new Error('Sem permissão: você cadastra só itens de EPI; materiais são com o almoxarifado');
+    }
     const nome = texto(n.nome)?.toUpperCase();
     if (!nome) throw new Error('Informe o nome do item');
     if (!texto(n.unidade)) throw new Error('Informe a unidade');
@@ -153,7 +170,7 @@ export class Estoque {
   }
 
   async salvarFuncionario(n: NovoFuncionario): Promise<Funcionario> {
-    this.exigirPermissao();
+    this.exigirControle();
     const nome = texto(n.nome);
     if (!nome) throw new Error('Informe o nome');
     const atual = n.id ? await this.a.funcionarios.obter(n.id) : undefined;
@@ -239,7 +256,7 @@ export class Estoque {
   }
 
   async salvarBem(n: NovoBem): Promise<Bem> {
-    this.exigirPermissao();
+    this.exigirControle();
     const atual = n.id ? await this.a.bens.obter(n.id) : undefined;
     const b = this.prepararBem(n, atual);
     await this.conferirDuplicado(b);
@@ -253,7 +270,7 @@ export class Estoque {
 
   /** Cadastra o bem e já registra onde ele está (levantamento geral). Nada é gravado se algo estiver errado. */
   async cadastrarBem(n: NovoBem, inicial: { posse: Posse; quantidade: number; data: string; prevista?: string }): Promise<Bem> {
-    this.exigirPermissao();
+    this.exigirControle();
     const b = this.prepararBem(n);
     await this.conferirDuplicado(b);
     const m = await this.prepararMovimentoBem(b, [], {
@@ -307,7 +324,7 @@ export class Estoque {
   }
 
   async movimentarBem(n: NovaMovimentacaoBem): Promise<MovimentoBem> {
-    this.exigirPermissao();
+    this.exigirControle();
     const bem = await this.a.bens.obter(n.bemId);
     if (!bem) throw new Error('Cadastro não encontrado');
     const m = await this.prepararMovimentoBem(bem, await this.a.movimentos_bens.listar(), n);
@@ -324,7 +341,7 @@ export class Estoque {
   }
 
   async editarMovimentoBem(id: string, campos: { observacao?: string; prevista?: string }): Promise<MovimentoBem> {
-    this.exigirPermissao();
+    this.exigirControle();
     const m = { ...(await this.movimentoBem(id)), alterado: this.autoria() };
     if ('observacao' in campos) { const v = texto(campos.observacao); if (v) m.observacao = v; else delete m.observacao; }
     if ('prevista' in campos) {
@@ -338,7 +355,7 @@ export class Estoque {
   }
 
   async cancelarMovimentoBem(id: string, motivo: string): Promise<MovimentoBem> {
-    this.exigirPermissao();
+    this.exigirControle();
     if (!texto(motivo)) throw new Error('Informe o motivo do cancelamento');
     const m = await this.movimentoBem(id);
     const todos = await this.a.movimentos_bens.listar();
@@ -382,7 +399,7 @@ export class Estoque {
   }
 
   async lancar(l: Lancamento): Promise<Movimento[]> {
-    this.exigirPermissao();
+    await this.exigirItens(l.linhas.map((ln) => ln.itemId));
     if (!l.linhas.length) throw new Error('Inclua pelo menos um item');
     const grupo = this.o.novoId();
     const criado = this.autoria();
@@ -436,7 +453,7 @@ export class Estoque {
    * (só se ainda não tem grupo). Seguro rodar de novo.
    */
   async migrarFuncionariosEpi(): Promise<number> {
-    this.exigirPermissao();
+    this.exigirControle();
     const movs = await this.a.movimentos.listar();
     const bens = await this.a.movimentos_bens.listar();
     const comEpi = new Set(movs.filter((m) => m.tipo === 'epi' && m.funcionarioId).map((m) => m.funcionarioId!));
@@ -468,7 +485,7 @@ export class Estoque {
   }
 
   async editarMovimento(id: string, campos: CamposEditaveis): Promise<Movimento> {
-    this.exigirPermissao();
+    await this.exigirItens([(await this.movimento(id)).itemId]);
     const m = { ...(await this.movimento(id)), ...campos, alterado: this.autoria() };
     for (const k of ['notaFiscal', 'fornecedor', 'observacao', 'ca', 'tamanho', 'validade'] as const) {
       if (k in campos) { const v = texto(campos[k]); if (v) m[k] = v; else delete m[k]; }
@@ -479,7 +496,7 @@ export class Estoque {
 
   /** Altera campos comuns (data, nota, frente, quem retirou…) em todas as linhas ativas do lançamento. */
   async editarGrupo(grupo: string, campos: Omit<CamposEditaveis, 'quantidade' | 'custoUnitario'>): Promise<Movimento[]> {
-    this.exigirPermissao();
+    await this.exigirItens((await this.a.movimentos.listar()).filter((m) => m.grupo === grupo).map((m) => m.itemId));
     const antes = await this.a.movimentos.listar();
     const alterado = this.autoria();
     const novos = antes.filter((m) => m.grupo === grupo && !m.cancelado).map((m) => {
@@ -499,7 +516,7 @@ export class Estoque {
   }
 
   async cancelarMovimento(id: string, motivo: string): Promise<Movimento> {
-    this.exigirPermissao();
+    await this.exigirItens([(await this.movimento(id)).itemId]);
     if (!texto(motivo)) throw new Error('Informe o motivo do cancelamento');
     const m = await this.movimento(id);
     return this.substituir({ ...m, cancelado: { ...this.autoria(), motivo: motivo.trim() } });
@@ -507,7 +524,7 @@ export class Estoque {
 
   /** Gera ajustes para as diferenças entre o contado e o saldo do aparelho. */
   async registrarInventario(data: string, contagens: Contagem[]): Promise<Movimento[]> {
-    this.exigirPermissao();
+    await this.exigirItens(contagens.map((c) => c.itemId));
     const pos = await this.posicao();
     const grupo = this.o.novoId();
     const criado = this.autoria();
@@ -527,14 +544,14 @@ export class Estoque {
   }
 
   async anexarFoto(grupo: string, uri: string): Promise<Anexo> {
-    this.exigirPermissao();
+    this.exigirControle();
     const x = await this.gravar<Anexo>('anexos', { id: this.o.novoId(), grupo, uri, criado: this.autoria() });
     this.alterou();
     return x;
   }
 
   async removerAnexo(id: string): Promise<void> {
-    this.exigirPermissao();
+    this.exigirControle();
     const x = await this.a.anexos.obter(id);
     if (!x) return;
     await this.gravar('anexos', { ...x, excluido: true });

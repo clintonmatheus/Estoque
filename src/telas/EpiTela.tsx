@@ -15,14 +15,14 @@ import { cores, estilos } from './estilos';
 type Filtro = 'entregar' | 'comprar' | 'trocas' | 'fichas' | 'saldo' | 'inventario';
 const JANELA_DIAS = 30;
 
-interface Props { estoque: Estoque; hoje: string; servicoFotos: ServicoFotos; versao?: number; onAlterou?: () => void }
+interface Props { estoque: Estoque; hoje: string; servicoFotos: ServicoFotos; versao?: number; onAlterou?: () => void; /** Só consulta: trocas, fichas e saldo. */ leitura?: boolean }
 
 /** EPIs com troca vencida ou próxima, e a ficha de entregas de cada funcionário. */
-export function EpiTela({ estoque, hoje, servicoFotos, versao = 0, onAlterou }: Props) {
+export function EpiTela({ estoque, hoje, servicoFotos, versao = 0, onAlterou, leitura = false }: Props) {
   const [movs, setMovs] = useState<Movimento[]>([]);
   const [itens, setItens] = useState<Item[]>([]);
   const [funcs, setFuncs] = useState<Funcionario[]>([]);
-  const [filtro, setFiltro] = useState<Filtro>('entregar');
+  const [filtro, setFiltro] = useState<Filtro>(leitura ? 'trocas' : 'entregar');
   const [funcionarioId, setFuncionarioId] = useState<string>();
   const [posicao, setPosicao] = useState<Posicao>();
 
@@ -46,8 +46,8 @@ export function EpiTela({ estoque, hoje, servicoFotos, versao = 0, onAlterou }: 
 
   const abas = (
     <Chips prefixo="epi" valor={filtro} onMudar={setFiltro} opcoes={[
-      { id: 'entregar', titulo: 'Entregar' }, { id: 'trocas', titulo: `Trocas (${trocas.length})` }, { id: 'fichas', titulo: 'Ficha do funcionário' },
-      { id: 'saldo', titulo: 'Estoque de EPI' }, { id: 'comprar', titulo: 'Compra' }, { id: 'inventario', titulo: 'Inventário' },
+      ...(leitura ? [] : [{ id: 'entregar' as const, titulo: 'Entregar' }]), { id: 'trocas', titulo: `Trocas (${trocas.length})` }, { id: 'fichas', titulo: 'Ficha do funcionário' },
+      { id: 'saldo', titulo: 'Estoque de EPI' }, ...(leitura ? [] : [{ id: 'comprar' as const, titulo: 'Compra' }, { id: 'inventario' as const, titulo: 'Inventário' }]),
     ]} />
   );
   if (filtro === 'entregar' || filtro === 'comprar') {

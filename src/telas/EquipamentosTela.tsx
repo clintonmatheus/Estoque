@@ -35,10 +35,10 @@ function alertasDoBem(b: Bem, d: Dados, hoje: string): string[] {
   return lista;
 }
 
-interface Props { estoque: Estoque; hoje: string; versao?: number; onAlterou?: () => void }
+interface Props { estoque: Estoque; hoje: string; versao?: number; onAlterou?: () => void; /** Só consulta (sem cadastrar nem movimentar). */ leitura?: boolean }
 
 /** Ferramentas e equipamentos locados: onde está cada um, quem está com ele e todas as movimentações. */
-export function EquipamentosTela({ estoque, hoje, versao = 0, onAlterou }: Props) {
+export function EquipamentosTela({ estoque, hoje, versao = 0, onAlterou, leitura = false }: Props) {
   const [dados, setDados] = useState<Dados>({ bens: [], movs: [], funcs: [], locais: [] });
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [busca, setBusca] = useState('');
@@ -72,7 +72,7 @@ export function EquipamentosTela({ estoque, hoje, versao = 0, onAlterou }: Props
       onFim={() => { mudou(); setModo({ tela: 'detalhe', id: bem.id }); }} />;
   }
   if (modo.tela === 'detalhe' && bem) {
-    return <Detalhe estoque={estoque} bem={bem} dados={dados} hoje={hoje} onVoltar={() => setModo({ tela: 'lista' })} onEditar={() => setModo({ tela: 'editar', id: bem.id })} onAlterou={mudou} />;
+    return <Detalhe estoque={estoque} bem={bem} dados={dados} hoje={hoje} leitura={leitura} onVoltar={() => setModo({ tela: 'lista' })} onEditar={() => setModo({ tela: 'editar', id: bem.id })} onAlterou={mudou} />;
   }
 
   return (
@@ -88,7 +88,7 @@ export function EquipamentosTela({ estoque, hoje, versao = 0, onAlterou }: Props
             { id: 'locado', titulo: `Locados (${contagem.locado})` }, { id: 'alertas', titulo: `Alertas (${contagem.alertas})` },
           ]} />
           <Campo testID="busca-equip" rotulo="Buscar" value={busca} onChangeText={setBusca} placeholder="Nome, quem está com ele, locadora" />
-          <Botao testID="novo-bem" titulo="+ Cadastrar ferramenta ou equipamento" secundario onPress={() => setModo({ tela: 'novo' })} />
+          {!leitura && <Botao testID="novo-bem" titulo="+ Cadastrar ferramenta ou equipamento" secundario onPress={() => setModo({ tela: 'novo' })} />}
         </View>
       }
       ListEmptyComponent={<Text style={estilos.subtitulo}>{ativos.length ? 'Nada neste filtro.' : 'Nada cadastrado ainda. Use o botão acima para fazer o levantamento.'}</Text>}
@@ -121,8 +121,8 @@ export function EquipamentosTela({ estoque, hoje, versao = 0, onAlterou }: Props
 type Destino = 'galpao' | 'campo' | 'locadora' | 'perda' | 'baixa';
 const MOTIVO: Record<Exclude<Destino, 'galpao' | 'campo'>, MotivoSaidaBem> = { locadora: 'devolucao-locadora', perda: 'perda', baixa: 'baixa' };
 
-function Detalhe({ estoque, bem, dados, hoje, onVoltar, onEditar, onAlterou }: {
-  estoque: Estoque; bem: Bem; dados: Dados; hoje: string; onVoltar: () => void; onEditar: () => void; onAlterou: () => void;
+function Detalhe({ estoque, bem, dados, hoje, leitura, onVoltar, onEditar, onAlterou }: {
+  estoque: Estoque; bem: Bem; dados: Dados; hoje: string; leitura: boolean; onVoltar: () => void; onEditar: () => void; onAlterou: () => void;
 }) {
   const posicoes = posicoesDoBem(dados.movs, bem.id);
   const unidade = bem.controle === 'unidade';
@@ -205,7 +205,7 @@ function Detalhe({ estoque, bem, dados, hoje, onVoltar, onEditar, onAlterou }: {
           </>
         )}
         {bem.observacao && <Text style={estilos.subtitulo}>{bem.observacao}</Text>}
-        <Botao testID="editar-bem" titulo="Editar cadastro" secundario onPress={onEditar} />
+        {!leitura && <Botao testID="editar-bem" titulo="Editar cadastro" secundario onPress={onEditar} />}
       </Cartao>
 
       <Text style={estilos.secao}>{unidade ? 'Onde está' : `Onde estão (${total})`}</Text>
@@ -221,7 +221,7 @@ function Detalhe({ estoque, bem, dados, hoje, onVoltar, onEditar, onAlterou }: {
 
       <Mensagem erro={erro} ok={ok} />
 
-      {bem.ativo && (
+      {bem.ativo && !leitura && (
         <>
           <Text style={estilos.secao}>Movimentar</Text>
           <Cartao>
@@ -254,7 +254,7 @@ function Detalhe({ estoque, bem, dados, hoje, onVoltar, onEditar, onAlterou }: {
           <Text style={estilos.subtitulo}>{`${formatarDataBR(m.data)}${m.prevista ? ` · devolver até ${formatarDataBR(m.prevista)}` : ''}${m.observacao ? ` · ${m.observacao}` : ''}`}</Text>
           <Text style={estilos.subtitulo}>{`Lançado por ${m.criado.nome}${m.alterado ? ' · editado' : ''}`}</Text>
           {m.cancelado && <Text style={{ color: cores.erro }}>{`Cancelado por ${m.cancelado.nome} — ${m.cancelado.motivo}`}</Text>}
-          {!m.cancelado && cancelando !== m.id && <Botao testID={`cancelar-mov-${m.id}`} titulo="Cancelar lançamento" perigo onPress={() => { setCancelando(m.id); setMotivo(''); }} />}
+          {!leitura && !m.cancelado && cancelando !== m.id && <Botao testID={`cancelar-mov-${m.id}`} titulo="Cancelar lançamento" perigo onPress={() => { setCancelando(m.id); setMotivo(''); }} />}
           {cancelando === m.id && (
             <View style={{ gap: 8 }}>
               <Campo testID="mov-motivo" rotulo="Motivo do cancelamento" value={motivo} onChangeText={setMotivo} />

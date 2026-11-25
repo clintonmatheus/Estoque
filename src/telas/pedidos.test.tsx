@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { financeiroDeTeste, CLINTON_FIN, ENCARREGADO, PAGADORA } from '../testes/fabricas';
+import { financeiroDeTeste, ARTHUR_FIN, CLINTON_FIN, ENCARREGADO, PAGADORA } from '../testes/fabricas';
 import { Raiz } from './Raiz';
 
 const saida = { pdf: jest.fn(async () => {}), xlsx: jest.fn(async () => {}) };
@@ -89,5 +89,21 @@ describe('Pedidos de pagamento na tela', () => {
     const [p] = await sol.pedidos.lista();
     expect(p).toMatchObject({ valor: 980, fornecedorId: c.forn.id, vencimento: '2026-12-05', nota: { numero: '1234', chave } });
     expect(await sol.pedidos.anexos(p.id)).toHaveLength(1);
+  });
+  it('administrador que não paga (Arthur, Daniel) confere e aprova, mas não vê o botão de pagar', async () => {
+    const c = await cadastros();
+    const sol = financeiroDeTeste(ENCARREGADO, c.armazenamento).financeiro;
+    const p = await sol.pedidos.solicitar({ tipo: 'pix', descricao: 'Aço', valor: 900, centroId: c.centro.id, fornecedorId: c.forn.id });
+    const arthur = financeiroDeTeste(ARTHUR_FIN, c.armazenamento).financeiro;
+    await render(<Raiz {...base} usuario={ARTHUR_FIN} financeiro={arthur} />);
+    expect(screen.getByTestId('pilar-financeiro')).toBeTruthy();
+    expect(screen.queryByTestId('pilar-estoque')).toBeNull();
+    await fireEvent.press(await screen.findByTestId(`pedido-${p.id}`));
+    await fireEvent.press(await screen.findByTestId('conferir'));
+    await waitFor(async () => expect((await arthur.pedidos.obter(p.id))?.status).toBe('pronto'));
+    await fireEvent.press(await screen.findByTestId('pedidos-pagar'));
+    await fireEvent.press(await screen.findByTestId(`pedido-${p.id}`));
+    expect(await screen.findByTestId('status-pedido')).toBeTruthy();
+    expect(screen.queryByTestId('pagar')).toBeNull();
   });
 });

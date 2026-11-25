@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { ARTHUR, CLINTON, estoqueComCadastros, estoqueDeTeste } from '../testes/fabricas';
+import { Estoque } from '../dados/estoque';
+import { ARTHUR, CLINTON, estoqueComCadastros, estoqueDeTeste, JOANA } from '../testes/fabricas';
 import { Raiz } from './Raiz';
 
 const fotos = { tirarFoto: async () => undefined, escolherDaGaleria: async () => undefined };
@@ -7,15 +8,53 @@ const saida = { pdf: jest.fn(async () => {}), xlsx: jest.fn(async () => {}) };
 const base = { servicoFotos: fotos, saida, hoje: '2026-11-11', agora: () => '2026-11-11T18:00:00.000Z', carregarSaldos: async () => [] };
 
 describe('Raiz', () => {
-  it('consultor vê só saldos, sem valores', async () => {
-    const carregar = jest.fn(async () => [{ itemId: 't', nome: 'TINTA', unidade: 'lata', estoqueMinimo: 2, saldo: 1 }]);
-    await render(<Raiz {...base} usuario={ARTHUR} carregarSaldos={carregar} />);
-    expect(await screen.findByText('TINTA')).toBeTruthy();
-    expect(screen.getByTestId('saldo-t')).toHaveTextContent('1');
-    expect(screen.getByText('Abaixo do mínimo (2)')).toBeTruthy();
-    expect(screen.getByText('Pintura')).toBeTruthy();
-    expect(screen.queryByText(/R\$/)).toBeNull();
+  it('consultor (Arthur, Daniel) vê todo o estoque, sem lançar nada', async () => {
+    const c = await estoqueComCadastros();
+    await c.estoque.lancar({ tipo: 'entrada', data: '2026-11-10', linhas: [{ itemId: c.tinta.id, quantidade: 1, custoUnitario: 50 }] });
+    const arthur = new Estoque(c.armazenamento, ARTHUR, { agora: () => '2026-11-11T12:00:00.000Z', novoId: () => 'x' });
+    await render(<Raiz {...base} usuario={ARTHUR} estoque={arthur} />);
+    expect(await screen.findByText('TINTA BRANCA 18L')).toBeTruthy();
     expect(screen.queryByTestId('aba-lancar')).toBeNull();
+    await fireEvent.press(screen.getByTestId('aba-equipamentos'));
+    expect(screen.queryByTestId('novo-bem')).toBeNull();
+    await fireEvent.press(screen.getByTestId('aba-epi'));
+    expect(screen.queryByTestId('epi-entregar')).toBeNull();
+    expect(screen.getByTestId('epi-trocas')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('aba-mais'));
+    expect(screen.getByTestId('aviso-leitura')).toBeTruthy();
+    expect(screen.getByTestId('abrir-historico')).toBeTruthy();
+    expect(screen.getByTestId('abrir-relatorios')).toBeTruthy();
+    expect(screen.queryByTestId('abrir-cadastros')).toBeNull();
+    expect(screen.queryByTestId('abrir-inventario')).toBeNull();
+    await fireEvent.press(screen.getByTestId('abrir-historico'));
+    await fireEvent.press((await screen.findAllByTestId(/^grupo-/))[0]);
+    expect(screen.queryByTestId('editar-cabecalho')).toBeNull();
+    expect(screen.queryAllByTestId(/^cancelar-/)).toHaveLength(0);
+  });
+
+  it('controle (Joana): EPI, ferramentas e cadastros de EPI; sem lançar material', async () => {
+    const c = await estoqueComCadastros();
+    const joana = new Estoque(c.armazenamento, JOANA, { agora: () => '2026-11-11T12:00:00.000Z', novoId: () => `j${Math.random()}` });
+    await render(<Raiz {...base} usuario={JOANA} estoque={joana} />);
+    expect(screen.queryByTestId('aba-lancar')).toBeNull();
+    await fireEvent.press(screen.getByTestId('aba-equipamentos'));
+    expect(await screen.findByTestId('novo-bem')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('aba-epi'));
+    expect(screen.getByTestId('epi-entregar')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('aba-mais'));
+    expect(screen.getByTestId('aviso-controle')).toBeTruthy();
+    expect(screen.queryByTestId('abrir-inventario')).toBeNull();
+    expect(screen.queryByTestId('abrir-importar')).toBeNull();
+    await fireEvent.press(screen.getByTestId('abrir-cadastros'));
+    expect(await screen.findByTestId('aba-itens-epi')).toBeTruthy();
+    expect(screen.queryByTestId('aba-itens')).toBeNull();
+    expect(screen.queryByTestId('aba-locais')).toBeNull();
+  });
+
+  it('quem não tem acesso a nenhum pilar vê o aviso para pedir liberação', async () => {
+    await render(<Raiz {...base} usuario={{ id: 'u-novo', nome: 'Novo', papel: 'nenhum' }} />);
+    expect(screen.getByTestId('sem-acesso')).toBeTruthy();
+    expect(screen.queryByTestId('pilar-conta')).toBeNull();
   });
 
   it('administrador importa a planilha, faz a contagem inicial e vê o valor em estoque', async () => {

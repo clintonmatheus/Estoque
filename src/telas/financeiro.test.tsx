@@ -13,8 +13,7 @@ describe('Financeiro na tela', () => {
     const e = await estoqueComCadastros(CLINTON_FIN);
     const { financeiro } = financeiroDeTeste(CLINTON_FIN, e.armazenamento);
     await render(<Raiz {...base} usuario={CLINTON_FIN} estoque={e.estoque} financeiro={financeiro} carregarSaldos={async () => []} />);
-    await fireEvent.press(screen.getByTestId('aba-mais'));
-    await fireEvent.press(screen.getByTestId('abrir-financeiro'));
+    await fireEvent.press(screen.getByTestId('pilar-financeiro'));
     await fireEvent.press(await screen.findByTestId('iniciais'));
     expect(await screen.findByText('Criados: 2 empresas, 6 contas, 2 centros de custo, 20 tipos de despesa e 2 encargos.')).toBeTruthy();
     expect(screen.getByText('Nubank Passos')).toBeTruthy();
@@ -37,22 +36,18 @@ describe('Financeiro na tela', () => {
     expect(screen.getByText('Pix (CNPJ): 05948553000275')).toBeTruthy();
   });
 
-  it('pagador vê os cadastros só para consulta e também os saldos do galpão', async () => {
+  it('pagador (sem estoque) vê só Pagamentos e Conta: o pilar Financeiro é dos administradores', async () => {
     const t = financeiroDeTeste(CLINTON_FIN);
     await t.financeiro.criarCadastrosIniciais();
-    await t.financeiro.salvarFornecedor({ nome: 'Casa do Construtor', forma: 'fatura', diaFechamento: 'sexta', ativo: true });
     const { financeiro } = financeiroDeTeste(PAGADORA, t.armazenamento);
-    const carregar = jest.fn(async () => [{ itemId: 't', nome: 'TINTA', unidade: 'lata', estoqueMinimo: 2, saldo: 1 }]);
-    await render(<Raiz {...base} usuario={PAGADORA} financeiro={financeiro} carregarSaldos={carregar} />);
-    await fireEvent.press(await screen.findByTestId('tela-financeiro'));
-    expect(await screen.findByText('Consulta. Só o administrador do financeiro altera os cadastros.')).toBeTruthy();
-    expect(screen.queryByTestId('nova-empresa')).toBeNull();
-    expect(screen.getByText('BB ALN')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('fin-fornecedores'));
-    expect(await screen.findByText('Fatura semanal · fecha sexta')).toBeTruthy();
-    expect(screen.queryByTestId('novo-fornecedor')).toBeNull();
-    await fireEvent.press(screen.getByTestId('tela-saldos'));
-    await waitFor(() => expect(screen.getByText('TINTA')).toBeTruthy());
+    await render(<Raiz {...base} usuario={PAGADORA} financeiro={financeiro} carregarSaldos={async () => []} />);
+    expect(await screen.findByTestId('novo-pedido')).toBeTruthy();
+    expect(screen.getByTestId('pilar-pagamentos')).toBeTruthy();
+    expect(screen.queryByTestId('pilar-financeiro')).toBeNull();
+    expect(screen.queryByTestId('pilar-estoque')).toBeNull();
+    await fireEvent.press(screen.getByTestId('pilar-conta'));
+    expect(screen.getByTestId('acesso-pagamentos')).toHaveTextContent('faz pedidos, confere e paga');
+    expect(screen.getByTestId('acesso-financeiro')).toHaveTextContent('sem acesso');
   });
 
   it('administrador só do financeiro importa a planilha de cadastros pela tela', async () => {
@@ -64,7 +59,7 @@ describe('Financeiro na tela', () => {
     });
     let arquivo = bytes;
     await render(<Raiz {...base} usuario={admin} financeiro={financeiro} carregarSaldos={async () => []} escolherPlanilha={async () => arquivo} />);
-    await fireEvent.press(await screen.findByTestId('tela-financeiro'));
+    await fireEvent.press(await screen.findByTestId('pilar-financeiro'));
     await fireEvent.press(await screen.findByTestId('fin-importar'));
     await fireEvent.press(screen.getByTestId('escolher-planilha-fin'));
     expect(await screen.findByText('Centros de custo, linha 3: Empresa "XYZ" não encontrada (cadastre na aba Empresas ou no app)')).toBeTruthy();
@@ -86,7 +81,7 @@ describe('Financeiro na tela', () => {
     const rmg = await financeiro.salvarCentro({ nome: 'RMG ÁGUA', ativo: true });
     const despesa = (await financeiro.tipos()).find((t) => t.nome === 'Despesa geral')!;
     await render(<Raiz {...base} usuario={{ ...PAGADORA, financeiro: 'admin' }} financeiro={financeiro} carregarSaldos={async () => []} />);
-    await fireEvent.press(await screen.findByTestId('tela-financeiro'));
+    await fireEvent.press(await screen.findByTestId('pilar-financeiro'));
     await fireEvent.press(await screen.findByTestId('fin-centros'));
     await fireEvent.press(await screen.findByTestId(`centro-${rmg.id}`));
     await fireEvent.press(screen.getByTestId('novo-custo-fixo'));
@@ -111,11 +106,12 @@ describe('Financeiro na tela', () => {
     expect(screen.getByTestId(`pct-${folha.id}`)).toHaveTextContent('37,77%');
   });
 
-  it('almoxarife sem perfil no financeiro não vê o menu do financeiro', async () => {
+  it('almoxarife sem perfil no financeiro não vê os pilares Pagamentos e Financeiro', async () => {
     const e = await estoqueComCadastros(MARILIA);
     const { financeiro } = financeiroDeTeste(MARILIA, e.armazenamento);
     await render(<Raiz {...base} usuario={MARILIA} estoque={e.estoque} financeiro={financeiro} carregarSaldos={async () => []} />);
-    await fireEvent.press(screen.getByTestId('aba-mais'));
-    expect(screen.queryByTestId('abrir-financeiro')).toBeNull();
+    expect(screen.getByTestId('pilar-estoque')).toBeTruthy();
+    expect(screen.queryByTestId('pilar-pagamentos')).toBeNull();
+    expect(screen.queryByTestId('pilar-financeiro')).toBeNull();
   });
 });

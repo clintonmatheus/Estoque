@@ -3,7 +3,7 @@ import { lerBoleto } from '../domain/boleto';
 import { lerChavePix } from '../domain/nomes';
 import { aprovadorExigido, ehAberto, podeAprovar, podeConferirOuPagar, podeEditar, possiveisDuplicados } from '../domain/pedidos';
 import {
-  ehAdminFinanceiro, NOME_STATUS_PEDIDO, temFinanceiro, type AcaoPedido, type Anexo, type Autoria, type Compra, type Pedido, type PagamentoPedido, type StatusPedido, type TipoPedido, type Usuario,
+  ehAdminFinanceiro, NOME_STATUS_PEDIDO, podePagar, temFinanceiro, type AcaoPedido, type Anexo, type Autoria, type Compra, type Pedido, type PagamentoPedido, type StatusPedido, type TipoPedido, type Usuario,
 } from '../domain/tipos';
 import type { Armazenamento, Tabela } from '../storage/contrato';
 import type { OpcoesEstoque } from './estoque';
@@ -284,7 +284,7 @@ export class Pedidos {
   }
 
   async pagar(id: string, d: DadosPagamento): Promise<Pedido> {
-    this.exigirPagadorOuAdmin();
+    if (!podePagar(this.usuario)) throw new Error('Sem permissão: só o pagador (ou o administrador marcado para pagar) registra o pagamento');
     const p = await this.carregar(id);
     if (p.status !== 'pronto') throw new Error('Só se paga pedido pronto para pagar');
     const conta = await this.a.contas.obter(d.contaId);

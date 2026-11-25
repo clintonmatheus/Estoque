@@ -8,7 +8,7 @@ import { lerNotaXml } from '../domain/nota';
 import { soNumeros } from '../domain/nomes';
 import { ordemDePagamento, podeAprovar, podeConferirOuPagar, podeEditar, prazoDoPedido, type Prazo } from '../domain/pedidos';
 import {
-  ehAdminFinanceiro, NOME_STATUS_PEDIDO, NOME_TIPO_PEDIDO, type Anexo, type CentroCusto, type Compra, type ContaBancaria, type Empresa, type Fornecedor, type Local, type Pedido, type TipoDespesa, type TipoPedido,
+  ehAdminFinanceiro, NOME_STATUS_PEDIDO, podePagar, NOME_TIPO_PEDIDO, type Anexo, type CentroCusto, type Compra, type ContaBancaria, type Empresa, type Fornecedor, type Local, type Pedido, type TipoDespesa, type TipoPedido,
 } from '../domain/tipos';
 import type { DocumentoEscolhido, ServicoFotos } from '../fotos/servico';
 import { Botao, Campo, Cartao, Chips, Mensagem, Seletor } from './componentes';
@@ -305,7 +305,7 @@ function PedidoDetalhe({ financeiro, cad, servicoFotos, hoje, pedido: p, versao,
   const frentes = cad.frentes.filter((f) => f.centroId === centroId);
   const podeConferir = gestor && p.status === 'enviado' && (admin || !meu);
   const podeLiberar = p.status === 'aprovacao' && podeAprovar(u, p.aprovador) && (admin || !meu);
-  const podePagar = gestor && p.status === 'pronto';
+  const pagaAqui = podePagar(u) && p.status === 'pronto';
   const podeDevolver = gestor && ['enviado', 'aprovacao', 'pronto'].includes(p.status) && (admin || !meu);
   const aberto = ['enviado', 'aprovacao', 'pronto', 'devolvido'].includes(p.status);
   const podeCancelar = aberto && (podeEditar(u, p) || gestor);
@@ -394,7 +394,7 @@ function PedidoDetalhe({ financeiro, cad, servicoFotos, hoje, pedido: p, versao,
       )}
 
       {podeLiberar && <Botao testID="aprovar" titulo="Aprovar" onPress={() => void agir(() => financeiro.pedidos.aprovar(p.id), 'Pedido aprovado.')} />}
-      {podePagar && <Botao testID="pagar" titulo="Registrar pagamento" onPress={() => setPagando(true)} />}
+      {pagaAqui && <Botao testID="pagar" titulo="Registrar pagamento" onPress={() => setPagando(true)} />}
       {p.status === 'devolvido' && meu && <Botao testID="corrigir" titulo="Corrigir e reenviar" onPress={onEditar} />}
       {p.status === 'enviado' && meu && <Botao testID="editar" secundario titulo="Editar" onPress={onEditar} />}
 

@@ -30,9 +30,15 @@ export async function estoqueComCadastros(usuario: Usuario = MARILIA) {
   return { ...t, tinta, piso, riachuelo, macaiba, joao };
 }
 
-export const CLINTON_FIN: Usuario = { ...CLINTON, financeiro: 'admin' };
-export const ENCARREGADO: Usuario = { id: 'u-enc', nome: 'Encarregado', papel: 'consultor', financeiro: 'solicitante' };
-export const PAGADORA: Usuario = { id: 'u-pagadora', nome: 'Pagadora', papel: 'consultor', financeiro: 'pagador' };
+export const CLINTON_FIN: Usuario = { ...CLINTON, financeiro: 'admin', paga: true };
+/** Administrador que vê tudo, aprova, mas não paga e não lança no estoque (Arthur, Daniel). */
+export const ARTHUR_FIN: Usuario = { ...ARTHUR, financeiro: 'admin' };
+/** Pagadora que também cuida de EPI, ferramentas e locações (Joana). */
+export const JOANA: Usuario = { id: 'u-joana', nome: 'Joana', papel: 'controle', financeiro: 'pagador' };
+/** Almoxarife que também pede pagamentos (Marilia). */
+export const MARILIA_SOL: Usuario = { ...MARILIA, financeiro: 'solicitante' };
+export const ENCARREGADO: Usuario = { id: 'u-enc', nome: 'Encarregado', papel: 'nenhum', financeiro: 'solicitante' };
+export const PAGADORA: Usuario = { id: 'u-pagadora', nome: 'Pagadora', papel: 'nenhum', financeiro: 'pagador' };
 
 /** Financeiro em memória (pode compartilhar o armazenamento com um Estoque). */
 export function financeiroDeTeste(usuario: Usuario = CLINTON_FIN, a: Armazenamento = criarArmazenamentoMemoria()) {

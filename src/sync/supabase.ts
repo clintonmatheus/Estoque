@@ -148,6 +148,7 @@ export class AutenticacaoSupabase implements Autenticacao {
     if (error || !data) throw erroDeRede(error);
     const u: Usuario = { id: data.id, nome: data.nome, papel: data.papel as Papel };
     if (data.financeiro) u.financeiro = data.financeiro as PapelFinanceiro;
+    if (data.paga === true) u.paga = true; // coluna criada na 010
     localStorage.setItem(CHAVE_PERFIL, JSON.stringify(u));
     return u;
   }

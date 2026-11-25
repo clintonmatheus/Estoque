@@ -1,4 +1,4 @@
-import { ehAdminFinanceiro, type Aprovador, type EventoPedido, type Pedido, type StatusPedido, type Usuario } from './tipos';
+import { ehAdminFinanceiro, podeConferir, type Aprovador, type EventoPedido, type Pedido, type StatusPedido, type Usuario } from './tipos';
 export type { Aprovador } from './tipos';
 
 /** Acima disto, todo pedido (menos reembolso) precisa de aprovação de administrador. */
@@ -13,8 +13,8 @@ export function aprovadorExigido(p: Pick<Pedido, 'tipo' | 'valor'>, abriuPagador
   return p.valor > LIMITE_APROVACAO ? 'admin' : 'nenhum';
 }
 
-const ehPagador = (u: Usuario) => u.financeiro === 'pagador';
-export const podeConferirOuPagar = (u: Usuario) => ehAdminFinanceiro(u) || ehPagador(u);
+/** Confere, vê todos os pedidos, devolve e fecha faturas (pagador e administrador). Pagar exige `podePagar`. */
+export const podeConferirOuPagar = podeConferir;
 
 /** O papel de quem abriu o pedido não fica no pedido: vem do usuário que o criou. */
 export interface QuemAbriu { id: string; pagador: boolean }

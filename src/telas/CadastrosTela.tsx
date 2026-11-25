@@ -11,10 +11,10 @@ import { estilos } from './estilos';
 type Aba = 'itens' | 'locais' | 'funcionarios' | 'itens-epi' | 'func-epi';
 const UNIDADES = ['un', 'pç', 'lata', 'balde', 'galão', 'kg', 'm', 'm²', 'rolo', 'saco', 'cx'];
 
-interface Props { estoque: Estoque; versao?: number; onAlterou?: () => void }
+interface Props { estoque: Estoque; versao?: number; onAlterou?: () => void; /** Controle (EPI, ferramentas e locações): só itens de EPI e funcionários. */ soControle?: boolean }
 
-export function CadastrosTela({ estoque, versao = 0, onAlterou }: Props) {
-  const [aba, setAba] = useState<Aba>('itens');
+export function CadastrosTela({ estoque, versao = 0, onAlterou, soControle = false }: Props) {
+  const [aba, setAba] = useState<Aba>(soControle ? 'itens-epi' : 'itens');
   const [itens, setItens] = useState<Item[]>([]);
   const [locais, setLocais] = useState<Local[]>([]);
   const [funcs, setFuncs] = useState<Funcionario[]>([]);
@@ -68,7 +68,7 @@ export function CadastrosTela({ estoque, versao = 0, onAlterou }: Props) {
       ListHeaderComponent={
         <View style={{ gap: 12 }}>
           <Chips prefixo="aba" valor={aba} onMudar={(a) => { setAba(a); setBusca(''); }}
-            opcoes={[{ id: 'itens', titulo: 'Itens' }, { id: 'locais', titulo: 'Frentes de serviço' }, { id: 'funcionarios', titulo: 'Funcionários' },
+            opcoes={[...(soControle ? [] : [{ id: 'itens' as const, titulo: 'Itens' }, { id: 'locais' as const, titulo: 'Frentes de serviço' }]), { id: 'funcionarios', titulo: 'Funcionários' },
               { id: 'itens-epi', titulo: 'Itens de EPI' }, { id: 'func-epi', titulo: 'Funcionários de EPI' }]} />
           {aba === 'itens' && itens.length === 0 && (
             <Cartao>

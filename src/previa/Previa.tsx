@@ -13,13 +13,16 @@ import { Raiz } from '../telas/Raiz';
 
 /**
  * Prévia com dados de exemplo (só para as telas do manual de treinamento).
- * Ativada no build web com EXPO_PUBLIC_PREVIA=1; ?perfil=consultor ou ?perfil=login muda a tela.
+ * Ativada no build web com EXPO_PUBLIC_PREVIA=1. ?perfil= almoxarife (Marilia, padrão), financeiro (Clinton), pagador (Joana),
+ * consultor (Arthur, administrador), solicitante (Caio) ou login muda a pessoa.
  */
 const HOJE = '2026-11-24';
-const MARILIA: Usuario = { id: 'u-marilia', nome: 'Marilia', papel: 'almoxarife' };
-const ARTHUR: Usuario = { id: 'u-arthur', nome: 'Arthur', papel: 'consultor' };
-const CLINTON: Usuario = { id: 'u-clinton', nome: 'Clinton', papel: 'admin', financeiro: 'admin' };
-const PAGADORA: Usuario = { id: 'u-pag', nome: 'Assistente adm.', papel: 'consultor', financeiro: 'pagador' };
+const MARILIA: Usuario = { id: 'u-marilia', nome: 'Marilia', papel: 'almoxarife', financeiro: 'solicitante' };
+const ARTHUR: Usuario = { id: 'u-arthur', nome: 'Arthur', papel: 'consultor', financeiro: 'admin' };
+const CLINTON: Usuario = { id: 'u-clinton', nome: 'Clinton', papel: 'admin', financeiro: 'admin', paga: true };
+const JOANA: Usuario = { id: 'u-joana', nome: 'Joana', papel: 'controle', financeiro: 'pagador' };
+const CAIO: Usuario = { id: 'u-caio', nome: 'Caio', papel: 'nenhum', financeiro: 'solicitante' };
+const PERFIS: Record<string, Usuario> = { consultor: ARTHUR, financeiro: CLINTON, pagador: JOANA, solicitante: CAIO, almoxarife: MARILIA };
 
 const armazenamento = criarArmazenamentoMemoria();
 
@@ -105,10 +108,12 @@ export function Previa() {
   let conteudo;
   if (perfil === 'login') conteudo = <LoginTela entrar={async () => { throw new Error('Prévia'); }} onEntrou={() => {}} />;
   else {
-    const usuario = perfil === 'consultor' ? ARTHUR : perfil === 'financeiro' ? CLINTON : perfil === 'pagador' ? PAGADORA : MARILIA;
-    const financeiro = usuario.financeiro || usuario.papel !== 'consultor' ? new Financeiro(armazenamento, usuario, { agora: () => `${HOJE}T15:00:00.000Z`, novoId: () => `n${Date.now()}` }) : undefined;
+    const usuario = PERFIS[perfil ?? ''] ?? MARILIA;
+    const opcoes = { agora: () => `${HOJE}T15:00:00.000Z`, novoId: () => `n${Date.now()}${Math.round(Math.random() * 1e6)}` };
+    const financeiro = new Financeiro(armazenamento, usuario, opcoes);
+    const doUsuario = usuario === MARILIA ? estoque : new Estoque(armazenamento, usuario, opcoes);
     conteudo = (
-      <Raiz usuario={usuario} estoque={perfil === 'consultor' || perfil === 'pagador' ? undefined : estoque} financeiro={financeiro} carregarSaldos={saldos}
+      <Raiz usuario={usuario} estoque={doUsuario} financeiro={financeiro} carregarSaldos={saldos}
         servicoFotos={{ tirarFoto: async () => undefined, escolherDaGaleria: async () => undefined, escolherDocumento: async () => ({ uri: 'file:///exemplo.pdf', nome: 'exemplo.pdf', formato: 'pdf' as const, bytes: new Uint8Array() }) }}
         saida={{ pdf: async () => {}, xlsx: async () => {} }} hoje={HOJE} agora={() => `${HOJE}T15:00:00.000Z`}
         estadoSync={{ sincronizando: false, recebidos: 0, ultimaEm: `${HOJE}T14:58:00.000Z` }}
