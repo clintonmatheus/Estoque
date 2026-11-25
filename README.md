@@ -27,6 +27,8 @@ saídas para as frentes de serviço, devoluções, transferências, inventário 
 
 **Atualização (Financeiro, etapa 1):** rode `supabase/006_financeiro_cadastros.sql` e depois `supabase/006b_perfis_financeiro.sql` (troque os e-mails).
 
+**Atualização (Financeiro, etapa 2 — pedidos de pagamento):** rode `supabase/007_pedidos.sql` (depois da 006). Gere o APK novo e publique a versão web.
+
 **Atualização (Etapa 2 — equipamentos e EPI):** rode também, uma vez cada, `supabase/004_epi.sql` (o saldo do consultor passa a descontar o EPI entregue) e `supabase/005_equipamentos.sql` (tabelas de ferramentas/equipamentos locados e suas movimentações).
 
 As permissões foram testadas num Postgres local: `bash supabase/teste/rodar.sh`.
@@ -53,6 +55,16 @@ Primeira etapa do sistema de pedidos de pagamento, centros de custo e conciliaç
 - **Começar:** botão "Criar cadastros iniciais" (ALN e Passos com as contas informadas, os centros Administração e Estoque/Galpão, 19 tipos de despesa) ou a planilha `modelos/Cadastros_Financeiro.xlsx` (já vem com 13 centros e 21 frentes da lista de presença e dos caixas; as frentes do estoque com contrato conhecido são ligadas sozinhas). Importação em **Financeiro → Importar planilha**, com simulação e erros por aba e linha. Regerar o modelo: `python3 scripts/gerar_modelo_financeiro.py .`
 - **Frentes antigas do estoque:** em Centros de custo, cada contrato digitado no estoque aparece para ser ligado a um centro (ou virar um centro novo).
 - **Supabase:** rode `supabase/006_financeiro_cadastros.sql` (uma vez) e depois `supabase/006b_perfis_financeiro.sql` com os e-mails reais.
+
+
+## Financeiro — etapa 2: pedidos de pagamento
+- **Fluxo:** solicitante abre o pedido → pagador/administrador **confere** e classifica → **aprova** (quando o valor exige) → **pagador paga** e registra empresa, conta, valor, data e comprovante. Cada passo fica no histórico; um pedido é um pagamento (sem parcelas).
+- **Tipos:** Pix, Boleto e Reembolso. Centro de custo obrigatório; frente de serviço e tipo de despesa opcionais (a conferência corrige).
+- **Aprovação:** até R$ 300 não precisa; acima, só administrador. Reembolso: até R$ 150 o pagador aprova, acima só administrador. Pedido aberto pelo pagador sempre vai a um administrador.
+- **Quem vê:** solicitante só os seus; pagador e administrador veem todos. O servidor (Supabase) aplica as mesmas regras.
+- **Leitura de documentos:** linha digitável/código de barras do boleto (confere dígitos, preenche valor e vencimento), **XML da NF-e** (fornecedor pelo CNPJ, valor, vencimento, número e chave; avisa quando a nota tem várias parcelas) e anexos PDF/foto. Pedido repetido (mesmo boleto, mesma nota ou mesmo favorecido, valor e data) é barrado ou pede confirmação.
+- **Onde fica:** quem só usa o financeiro entra em "Pedidos"; quem também usa o galpão acha em Mais → Pedidos de pagamento.
+- **Ainda não faz:** fatura semanal de loja, leitura do texto do PDF, leitura de código de barras pela câmera, NFS-e em XML.
 
 ## Levantamento e treinamento
 

@@ -31,6 +31,7 @@ export async function estoqueComCadastros(usuario: Usuario = MARILIA) {
 }
 
 export const CLINTON_FIN: Usuario = { ...CLINTON, financeiro: 'admin' };
+export const ENCARREGADO: Usuario = { id: 'u-enc', nome: 'Encarregado', papel: 'consultor', financeiro: 'solicitante' };
 export const PAGADORA: Usuario = { id: 'u-pagadora', nome: 'Pagadora', papel: 'consultor', financeiro: 'pagador' };
 
 /** Financeiro em memória (pode compartilhar o armazenamento com um Estoque). */

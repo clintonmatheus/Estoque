@@ -196,6 +196,9 @@ export interface MovimentoBem {
 export interface Anexo {
   id: string;
   grupo: string;
+  /** Foto (padrão), PDF ou XML de nota fiscal. */
+  formato?: 'imagem' | 'pdf' | 'xml';
+  nome?: string;
   /** Endereço local no aparelho ('' enquanto não baixado). */
   uri: string;
   caminhoRemoto?: string;
@@ -312,3 +315,74 @@ export interface TipoDespesa {
   criado: Autoria;
   alterado?: Autoria;
 }
+
+
+// ---------- Financeiro: pedidos de pagamento (etapa 2) ----------
+
+export type TipoPedido = 'pix' | 'boleto' | 'reembolso';
+/**
+ * enviado: aguardando conferência · aprovacao: conferido, falta aprovar · pronto: pode pagar · pago ·
+ * devolvido: voltou ao solicitante para corrigir · rejeitado · cancelado.
+ */
+export type StatusPedido = 'enviado' | 'aprovacao' | 'pronto' | 'pago' | 'devolvido' | 'rejeitado' | 'cancelado';
+
+export type AcaoPedido = 'enviou' | 'reenviou' | 'editou' | 'conferiu' | 'aprovou' | 'devolveu' | 'rejeitou' | 'cancelou' | 'pagou';
+/** Quem precisa aprovar o pedido (definido pelo valor, pelo tipo e por quem abriu). */
+export type Aprovador = 'nenhum' | 'pagador' | 'admin';
+export interface EventoPedido { acao: AcaoPedido; por: Autoria; nota?: string }
+
+export interface NotaFiscalPedido {
+  numero?: string;
+  /** Chave de acesso de 44 dígitos (vem do XML da NF-e). */
+  chave?: string;
+  emissao?: string;
+  /** CNPJ do destinatário que consta na nota (indica a empresa que deve pagar). */
+  destinatario?: string;
+}
+
+export interface PagamentoPedido {
+  data: string;
+  empresaId: string;
+  contaId: string;
+  valor: number;
+  /** Diferença em relação ao pedido (juros, multa ou desconto) explicada aqui. */
+  observacao?: string;
+}
+
+export interface Pedido {
+  id: string;
+  /** Código curto para falar do pedido (ex.: P-1125-7K2). */
+  codigo: string;
+  tipo: TipoPedido;
+  status: StatusPedido;
+  descricao: string;
+  valor: number;
+  /** Obrigatório: a quem o custo pertence. */
+  centroId: string;
+  frenteId?: string;
+  tipoDespesaId?: string;
+  fornecedorId?: string;
+  /** Quem recebe quando não é um fornecedor cadastrado (nome como veio no pedido). */
+  favorecido?: string;
+  /** Pix: chave normalizada. */
+  chavePix?: string;
+  /** Boleto: linha digitável ou código de barras (só números). */
+  boleto?: string;
+  /** Data do vencimento (boleto) ou data desejada (Pix). */
+  vencimento?: string;
+  urgente?: boolean;
+  aprovador: Aprovador;
+  nota?: NotaFiscalPedido;
+  /** Reembolso: quem gastou o dinheiro. */
+  reembolsoDe?: string;
+  pagamento?: PagamentoPedido;
+  historico: EventoPedido[];
+  criado: Autoria;
+  alterado?: Autoria;
+}
+
+export const NOME_TIPO_PEDIDO: Record<TipoPedido, string> = { pix: 'Pix', boleto: 'Boleto', reembolso: 'Reembolso' };
+export const NOME_STATUS_PEDIDO: Record<StatusPedido, string> = {
+  enviado: 'Aguardando conferência', aprovacao: 'Aguardando aprovação', pronto: 'Pronto para pagar', pago: 'Pago',
+  devolvido: 'Devolvido para correção', rejeitado: 'Rejeitado', cancelado: 'Cancelado',
+};

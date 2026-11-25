@@ -44,6 +44,7 @@ describe('Financeiro na tela', () => {
     const { financeiro } = financeiroDeTeste(PAGADORA, t.armazenamento);
     const carregar = jest.fn(async () => [{ itemId: 't', nome: 'TINTA', unidade: 'lata', estoqueMinimo: 2, saldo: 1 }]);
     await render(<Raiz {...base} usuario={PAGADORA} financeiro={financeiro} carregarSaldos={carregar} />);
+    await fireEvent.press(await screen.findByTestId('tela-financeiro'));
     expect(await screen.findByText('Consulta. Só o administrador do financeiro altera os cadastros.')).toBeTruthy();
     expect(screen.queryByTestId('nova-empresa')).toBeNull();
     expect(screen.getByText('BB ALN')).toBeTruthy();
@@ -63,6 +64,7 @@ describe('Financeiro na tela', () => {
     });
     let arquivo = bytes;
     await render(<Raiz {...base} usuario={admin} financeiro={financeiro} carregarSaldos={async () => []} escolherPlanilha={async () => arquivo} />);
+    await fireEvent.press(await screen.findByTestId('tela-financeiro'));
     await fireEvent.press(await screen.findByTestId('fin-importar'));
     await fireEvent.press(screen.getByTestId('escolher-planilha-fin'));
     expect(await screen.findByText('Centros de custo, linha 3: Empresa "XYZ" não encontrada (cadastre na aba Empresas ou no app)')).toBeTruthy();
@@ -84,6 +86,7 @@ describe('Financeiro na tela', () => {
     const rmg = await financeiro.salvarCentro({ nome: 'RMG ÁGUA', ativo: true });
     const despesa = (await financeiro.tipos()).find((t) => t.nome === 'Despesa geral')!;
     await render(<Raiz {...base} usuario={{ ...PAGADORA, financeiro: 'admin' }} financeiro={financeiro} carregarSaldos={async () => []} />);
+    await fireEvent.press(await screen.findByTestId('tela-financeiro'));
     await fireEvent.press(await screen.findByTestId('fin-centros'));
     await fireEvent.press(await screen.findByTestId(`centro-${rmg.id}`));
     await fireEvent.press(screen.getByTestId('novo-custo-fixo'));

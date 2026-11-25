@@ -35,7 +35,7 @@ export class RemotoFalso implements Remoto {
   async enviarArquivo(a: Anexo) {
     if (this.falharEnvios) throw new Error('Sem conexão');
     this.arquivosEnviados.push(a.id);
-    return `${a.grupo}/${a.id}.jpg`;
+    return `${a.grupo}/${a.id}.${a.formato === 'pdf' ? 'pdf' : a.formato === 'xml' ? 'xml' : 'jpg'}`;
   }
 
   async baixarArquivo(a: Anexo) {

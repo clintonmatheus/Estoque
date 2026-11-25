@@ -39,6 +39,12 @@ function erroDeRede(e: unknown): Error {
   return new Error(msg || 'Falha no servidor');
 }
 
+const FORMATO_ARQUIVO = {
+  imagem: { ext: 'jpg', tipo: 'image/jpeg' },
+  pdf: { ext: 'pdf', tipo: 'application/pdf' },
+  xml: { ext: 'xml', tipo: 'application/xml' },
+} as const;
+
 export class RemotoSupabase implements Remoto {
   constructor(private sb: SupabaseClient) {}
 
@@ -67,8 +73,9 @@ export class RemotoSupabase implements Remoto {
   }
 
   async enviarArquivo(a: Anexo) {
-    const caminho = `${a.grupo}/${a.id}.jpg`;
-    const { error } = await this.sb.storage.from('anexos').upload(caminho, await arquivos.ler(a.uri), { contentType: 'image/jpeg', upsert: true });
+    const { ext, tipo } = FORMATO_ARQUIVO[a.formato ?? 'imagem'];
+    const caminho = `${a.grupo}/${a.id}.${ext}`;
+    const { error } = await this.sb.storage.from('anexos').upload(caminho, await arquivos.ler(a.uri), { contentType: tipo, upsert: true });
     if (error) throw erroDeRede(error);
     return caminho;
   }
@@ -77,7 +84,7 @@ export class RemotoSupabase implements Remoto {
     if (!a.caminhoRemoto) throw new Error('Foto sem arquivo no servidor');
     const { data, error } = await this.sb.storage.from('anexos').createSignedUrl(a.caminhoRemoto, 3600);
     if (error || !data) throw erroDeRede(error);
-    return arquivos.baixar(data.signedUrl, `${a.id}.jpg`);
+    return arquivos.baixar(data.signedUrl, `${a.id}.${FORMATO_ARQUIVO[a.formato ?? 'imagem'].ext}`);
   }
 
   aoMudar(callback: () => void) {
