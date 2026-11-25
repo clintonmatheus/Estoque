@@ -8,8 +8,10 @@ export interface DocumentoEscolhido {
   uri: string;
   nome: string;
   formato: 'imagem' | 'pdf' | 'xml';
-  /** Conteúdo do arquivo quando é XML (para ler a NF-e). */
+  /** Conteúdo do arquivo quando é XML (para ler a nota fiscal). */
   texto?: string;
+  /** Conteúdo do arquivo quando é PDF (para achar o código do boleto). */
+  bytes?: Uint8Array;
 }
 
 export interface ServicoFotos {
@@ -53,5 +55,9 @@ servicoFotosDoApp.escolherDocumento = async () => {
   const ext = (a.name.split('.').pop() ?? '').toLowerCase();
   const formato = FORMATO[ext] ?? (a.mimeType?.includes('pdf') ? 'pdf' : a.mimeType?.includes('xml') ? 'xml' : 'imagem');
   const uri = arquivos.guardar(a.uri, `${novoId()}.${formato === 'imagem' ? 'jpg' : formato}`);
-  return { uri, nome: a.name, formato, ...(formato === 'xml' ? { texto: decodificarUtf8(await arquivos.ler(uri)) } : {}) };
+  return {
+    uri, nome: a.name, formato,
+    ...(formato === 'xml' ? { texto: decodificarUtf8(await arquivos.ler(uri)) } : {}),
+    ...(formato === 'pdf' ? { bytes: await arquivos.ler(uri) } : {}),
+  };
 };

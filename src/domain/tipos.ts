@@ -349,6 +349,9 @@ export interface PagamentoPedido {
   observacao?: string;
 }
 
+/** Fatura de loja: soma das compras lançadas, valor cobrado e a explicação da diferença. */
+export interface FaturaPedido { compras: string[]; soma: number; justificativa?: string }
+
 export interface Pedido {
   id: string;
   /** Código curto para falar do pedido (ex.: P-1125-7K2). */
@@ -375,6 +378,8 @@ export interface Pedido {
   nota?: NotaFiscalPedido;
   /** Reembolso: quem gastou o dinheiro. */
   reembolsoDe?: string;
+  /** Fatura semanal de loja: as compras que o pedido paga (o centro de custo do pedido é o da maior compra). */
+  fatura?: FaturaPedido;
   pagamento?: PagamentoPedido;
   historico: EventoPedido[];
   criado: Autoria;
@@ -386,3 +391,29 @@ export const NOME_STATUS_PEDIDO: Record<StatusPedido, string> = {
   enviado: 'Aguardando conferência', aprovacao: 'Aguardando aprovação', pronto: 'Pronto para pagar', pago: 'Pago',
   devolvido: 'Devolvido para correção', rejeitado: 'Rejeitado', cancelado: 'Cancelado',
 };
+
+// ---------- Financeiro: compras a faturar (fatura semanal da loja) ----------
+
+/** aberta: aguarda o fechamento · em_fatura: já entrou num pedido de pagamento · cancelada. */
+export type StatusCompra = 'aberta' | 'em_fatura' | 'cancelada';
+
+export interface Compra {
+  id: string;
+  fornecedorId: string;
+  /** Data em que a compra foi feita. */
+  data: string;
+  descricao: string;
+  valor: number;
+  centroId: string;
+  frenteId?: string;
+  tipoDespesaId?: string;
+  /** Número da nota ou do cupom, quando houver. */
+  documento?: string;
+  status: StatusCompra;
+  /** Pedido de pagamento da fatura que incluiu esta compra. */
+  pedidoId?: string;
+  criado: Autoria;
+  alterado?: Autoria;
+}
+
+export const NOME_STATUS_COMPRA: Record<StatusCompra, string> = { aberta: 'Aguardando fatura', em_fatura: 'Na fatura', cancelada: 'Cancelada' };

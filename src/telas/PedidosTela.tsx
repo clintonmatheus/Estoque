@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import type { Financeiro } from '../dados/financeiro';
 import type { DadosPagamento, NovoPedido } from '../dados/pedidos';
-import { lerBoleto } from '../domain/boleto';
 import { analisarDataBR, formatarDataBR } from '../domain/datas';
 import { formatarMoeda, lerNumero } from '../domain/formato';
-import { lerNfeXml } from '../domain/nfe';
+import { lerNotaXml } from '../domain/nota';
 import { soNumeros } from '../domain/nomes';
 import { ordemDePagamento, podeAprovar, podeConferirOuPagar, podeEditar, prazoDoPedido, type Prazo } from '../domain/pedidos';
 import {
@@ -13,6 +12,7 @@ import {
 } from '../domain/tipos';
 import type { DocumentoEscolhido, ServicoFotos } from '../fotos/servico';
 import { Botao, Campo, Cartao, Chips, Mensagem, Seletor } from './componentes';
+import { EntradaBoleto } from './EntradaBoleto';
 import { cores, estilos } from './estilos';
 
 type Filtro = 'conferir' | 'aprovar' | 'pagar' | 'todos' | 'abertos';
@@ -136,16 +136,6 @@ function PedidoForm({ financeiro, cad, servicoFotos, hoje, pedido, pedidos, onVo
   const [salvando, setSalvando] = useState(false);
 
   const frentes = useMemo(() => cad.frentes.filter((f) => f.centroId === centroId), [cad.frentes, centroId]);
-  const lido = useMemo(() => { try { return boleto.trim() ? lerBoleto(boleto, hoje) : undefined; } catch { return undefined; } }, [boleto, hoje]);
-  const erroBoleto = useMemo(() => { try { if (boleto.trim()) lerBoleto(boleto, hoje); return undefined; } catch (e) { return msgErro(e); } }, [boleto, hoje]);
-
-  // Linha digitável lida: preenche valor e vencimento (o solicitante ainda pode corrigir).
-  useEffect(() => {
-    if (!lido) return;
-    if (lido.valor !== undefined) setValor(String(lido.valor).replace('.', ','));
-    if (lido.vencimento) setVencimento(formatarDataBR(lido.vencimento));
-  }, [lido]);
-
   const escolherFornecedor = (id: string) => {
     const f = cad.fornecedores.find((x) => x.id === id);
     setFornecedorId(id);
@@ -159,7 +149,7 @@ function PedidoForm({ financeiro, cad, servicoFotos, hoje, pedido, pedidos, onVo
       if (!d) { if (!servicoFotos.escolherDocumento) setErro('Este aparelho não consegue escolher arquivos.'); return; }
       setAnexos((a) => [...a, { uri: d.uri, formato: d.formato, nome: d.nome }]);
       if (d.formato === 'xml' && d.texto) {
-        const n = lerNfeXml(d.texto);
+        const n = lerNotaXml(d.texto);
         const forn = cad.fornecedores.find((f) => f.documento && soNumeros(f.documento) === soNumeros(n.emitente.documento));
         const emp = cad.empresas.find((e) => e.cnpj && n.destinatario && soNumeros(e.cnpj) === soNumeros(n.destinatario.documento));
         if (forn) { setFornecedorId(forn.id); if (forn.chavePix && !chavePix) setChavePix(forn.chavePix); } else setFavorecido(n.emitente.nome);
@@ -168,7 +158,7 @@ function PedidoForm({ financeiro, cad, servicoFotos, hoje, pedido, pedidos, onVo
         if (dup?.vencimento) setVencimento(formatarDataBR(dup.vencimento));
         if (!descricao.trim()) setDescricao(`NF ${n.numero} — ${n.emitente.nome}`);
         setNota({ numero: n.numero, chave: n.chave, emissao: n.emissao, ...(n.destinatario ? { destinatario: n.destinatario.documento } : {}) });
-        setInfo(`NF-e ${n.numero} lida: ${n.emitente.nome}, ${reais(n.valor)}${n.duplicatas.length > 1 ? `. Há ${n.duplicatas.length} parcelas na nota: este pedido usa a primeira, abra um pedido por parcela.` : ''}${emp ? ` Destinatário: ${emp.apelido}.` : ''}`);
+        setInfo(`${n.tipo === 'nfse' ? 'NFS-e' : 'NF-e'} ${n.numero} lida: ${n.emitente.nome}, ${reais(n.valor)}${n.duplicatas.length > 1 ? `. Há ${n.duplicatas.length} parcelas na nota: este pedido usa a primeira, abra um pedido por parcela.` : ''}${emp ? ` Destinatário: ${emp.apelido}.` : ''}`);
       }
     } catch (e) { setErro(msgErro(e)); }
   };
@@ -223,9 +213,9 @@ function PedidoForm({ financeiro, cad, servicoFotos, hoje, pedido, pedidos, onVo
         {tipo !== 'boleto' && <Campo testID="pedido-pix" rotulo="Chave Pix" value={chavePix} onChangeText={setChavePix} autoCapitalize="none" />}
         {tipo === 'boleto' && (
           <>
-            <Campo testID="pedido-boleto" rotulo="Linha digitável ou código de barras" value={boleto} onChangeText={setBoleto} keyboardType="numbers-and-punctuation" multiline />
-            {lido && <Text testID="boleto-lido" style={{ color: cores.ok, fontWeight: '600' }}>Boleto lido{lido.valor !== undefined ? `: ${reais(lido.valor)}` : ''}{lido.vencimento ? `, vence ${dataBR(lido.vencimento)}` : ''}</Text>}
-            {erroBoleto && <Text testID="boleto-erro" style={estilos.erro}>{erroBoleto}</Text>}
+            <EntradaBoleto valor={boleto} onMudar={setBoleto} hoje={hoje} servicoFotos={servicoFotos}
+              onPdf={(d) => setAnexos((x) => x.some((y) => y.uri === d.uri) ? x : [...x, { uri: d.uri, formato: 'pdf', nome: d.nome }])}
+              onLido={(b) => { if (b.valor !== undefined) setValor(String(b.valor).replace('.', ',')); if (b.vencimento) setVencimento(formatarDataBR(b.vencimento)); }} />
           </>
         )}
       </Cartao>

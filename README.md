@@ -27,7 +27,7 @@ saídas para as frentes de serviço, devoluções, transferências, inventário 
 
 **Atualização (Financeiro, etapa 1):** rode `supabase/006_financeiro_cadastros.sql` e depois `supabase/006b_perfis_financeiro.sql` (troque os e-mails).
 
-**Atualização (Financeiro, etapa 2 — pedidos de pagamento):** rode `supabase/007_pedidos.sql` (depois da 006). Gere o APK novo e publique a versão web.
+**Atualização (Financeiro, etapa 2 — pedidos de pagamento e fatura semanal):** rode, nesta ordem, `supabase/007_pedidos.sql` e `supabase/008_compras.sql` (depois da 006). Gere o APK novo (inclui a câmera para ler boletos) e publique a versão web.
 
 **Atualização (Etapa 2 — equipamentos e EPI):** rode também, uma vez cada, `supabase/004_epi.sql` (o saldo do consultor passa a descontar o EPI entregue) e `supabase/005_equipamentos.sql` (tabelas de ferramentas/equipamentos locados e suas movimentações).
 
@@ -64,7 +64,9 @@ Primeira etapa do sistema de pedidos de pagamento, centros de custo e conciliaç
 - **Quem vê:** solicitante só os seus; pagador e administrador veem todos. O servidor (Supabase) aplica as mesmas regras.
 - **Leitura de documentos:** linha digitável/código de barras do boleto (confere dígitos, preenche valor e vencimento), **XML da NF-e** (fornecedor pelo CNPJ, valor, vencimento, número e chave; avisa quando a nota tem várias parcelas) e anexos PDF/foto. Pedido repetido (mesmo boleto, mesma nota ou mesmo favorecido, valor e data) é barrado ou pede confirmação.
 - **Onde fica:** quem só usa o financeiro entra em "Pedidos"; quem também usa o galpão acha em Mais → Pedidos de pagamento.
-- **Ainda não faz:** fatura semanal de loja, leitura do texto do PDF, leitura de código de barras pela câmera, NFS-e em XML.
+- **Mais formas de ler o boleto:** câmera (código de barras, só no celular), PDF (acha a linha digitável dentro do texto do PDF; PDF escaneado, que é só imagem, não tem texto: digite ou use a câmera) e XML de NFS-e (padrões ABRASF e nacional) além da NF-e. Toda leitura confere os dígitos verificadores.
+- **Fatura semanal (compras a faturar):** em lojas cadastradas com forma "Fatura semanal", almoxarife, solicitante, pagador e administrador lançam cada compra (loja, valor, centro de custo, **nota ou foto obrigatória**). O pagador/administrador fecha a fatura da loja: marca as compras, informa o valor cobrado (boleto ou Pix) e o sistema gera **um pedido de pagamento**. Se o valor da fatura difere da soma das compras, é preciso justificar. Cancelar ou rejeitar o pedido devolve as compras à lista em aberto. O centro de custo do pedido é o da maior compra; a divisão por centro fica nas compras (usada no livro de custos, etapa 3).
+- **Supabase:** rode `supabase/008_compras.sql` depois da 007.
 
 ## Levantamento e treinamento
 

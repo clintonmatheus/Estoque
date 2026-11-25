@@ -3,7 +3,7 @@ import { lerBoleto } from '../domain/boleto';
 import { lerChavePix } from '../domain/nomes';
 import { aprovadorExigido, ehAberto, podeAprovar, podeConferirOuPagar, podeEditar, possiveisDuplicados } from '../domain/pedidos';
 import {
-  ehAdminFinanceiro, NOME_STATUS_PEDIDO, temFinanceiro, type AcaoPedido, type Anexo, type Autoria, type Pedido, type PagamentoPedido, type StatusPedido, type TipoPedido, type Usuario,
+  ehAdminFinanceiro, NOME_STATUS_PEDIDO, temFinanceiro, type AcaoPedido, type Anexo, type Autoria, type Compra, type Pedido, type PagamentoPedido, type StatusPedido, type TipoPedido, type Usuario,
 } from '../domain/tipos';
 import type { Armazenamento, Tabela } from '../storage/contrato';
 import type { OpcoesEstoque } from './estoque';
@@ -27,6 +27,8 @@ export interface NovoPedido {
   urgente?: boolean;
   nota?: Pedido['nota'];
   reembolsoDe?: string;
+  /** Fatura semanal: ids das compras que este pedido paga (o centro de custo vem da maior compra). */
+  fatura?: { compras: string[]; justificativa?: string };
 }
 
 /** O que a conferência pode corrigir (a classificação); valor e tipo voltam ao solicitante pela devolução. */
@@ -113,8 +115,10 @@ export class Pedidos {
     this.exigirFinanceiro();
     const atual = n.id ? await this.a.pedidos.obter(n.id) : undefined;
     if (atual && !podeEditar(this.usuario, atual)) throw new Error('Este pedido já foi conferido ou não é seu: não dá para editar');
-    const dados = await this.validar(n);
     const id = n.id ?? this.o.novoId();
+    const fatura = n.fatura ? await this.resolverFatura(n, id) : undefined;
+    if (fatura) n = { ...n, centroId: fatura.centroId, frenteId: undefined, tipoDespesaId: n.tipoDespesaId };
+    const dados = await this.validar(n);
     const agora = this.o.agora();
     const base: Omit<Pedido, 'historico' | 'status' | 'criado'> = {
       id, codigo: atual?.codigo ?? this.codigo(id, agora), tipo: n.tipo, valor: n.valor,
@@ -122,6 +126,7 @@ export class Pedidos {
       ...(n.fornecedorId ? { fornecedorId: n.fornecedorId } : {}), ...dados,
       ...(n.urgente ? { urgente: true } : {}), ...(n.nota && Object.keys(n.nota).length ? { nota: n.nota } : {}),
       ...(texto(n.reembolsoDe) ? { reembolsoDe: texto(n.reembolsoDe) } : {}),
+      ...(fatura ? { fatura: fatura.dados } : {}),
       aprovador: aprovadorExigido({ tipo: n.tipo, valor: n.valor }, this.abriuPagador),
     };
     const outros = await this.a.pedidos.listar();
@@ -137,8 +142,54 @@ export class Pedidos {
       historico: [...(atual?.historico ?? []), { acao, por: this.autoria() }],
     };
     await this.gravar('pedidos', pedido);
+    if (fatura) await this.prenderCompras(fatura.compras, id);
     this.o.aoAlterar?.();
     return pedido;
+  }
+
+  /** Confere as compras da fatura: mesma loja, em aberto (ou já deste pedido), soma e justificativa da diferença. */
+  private async resolverFatura(n: NovoPedido, id: string) {
+    if (!podeConferirOuPagar(this.usuario)) throw new Error('Sem permissão: só o pagador ou o administrador fecha uma fatura');
+    if (n.tipo === 'reembolso') throw new Error('Fatura de loja é paga por boleto ou Pix');
+    if (!n.fornecedorId) throw new Error('Escolha a loja da fatura');
+    const ids = [...new Set(n.fatura!.compras)];
+    if (!ids.length) throw new Error('Escolha ao menos uma compra para a fatura');
+    const compras: Compra[] = [];
+    for (const cid of ids) {
+      const c = await this.a.compras.obter(cid);
+      if (!c) throw new Error('Compra não encontrada');
+      if (c.fornecedorId !== n.fornecedorId) throw new Error('Todas as compras da fatura precisam ser da mesma loja');
+      if (c.status === 'cancelada' || (c.status === 'em_fatura' && c.pedidoId !== id)) throw new Error('Uma das compras já está em outra fatura ou foi cancelada');
+      compras.push(c);
+    }
+    const soma = Math.round(compras.reduce((t, c) => t + c.valor, 0) * 100) / 100;
+    const justificativa = texto(n.fatura!.justificativa);
+    if (Math.abs(soma - n.valor) > 0.005 && !justificativa) {
+      throw new Error(`O valor da fatura (R$ ${n.valor.toFixed(2).replace('.', ',')}) é diferente da soma das compras (R$ ${soma.toFixed(2).replace('.', ',')}): explique a diferença`);
+    }
+    const porCentro = new Map<string, number>();
+    for (const c of compras) porCentro.set(c.centroId, (porCentro.get(c.centroId) ?? 0) + c.valor);
+    const centroId = [...porCentro].sort((a, b) => b[1] - a[1])[0][0];
+    return { centroId, compras: ids, dados: { compras: ids, soma, ...(justificativa ? { justificativa } : {}) } };
+  }
+
+  private async prenderCompras(ids: string[], pedidoId: string) {
+    const agora = this.autoria();
+    for (const cid of ids) {
+      const c = await this.a.compras.obter(cid);
+      if (c && (c.status !== 'em_fatura' || c.pedidoId !== pedidoId)) await this.gravar('compras', { ...c, status: 'em_fatura' as const, pedidoId, alterado: agora });
+    }
+  }
+
+  /** Pedido cancelado ou rejeitado: as compras voltam a aguardar uma nova fatura. */
+  private async soltarCompras(p: Pedido) {
+    for (const cid of p.fatura?.compras ?? []) {
+      const c = await this.a.compras.obter(cid);
+      if (c && c.pedidoId === p.id && c.status === 'em_fatura') {
+        const { pedidoId: _x, ...resto } = c;
+        await this.gravar('compras', { ...resto, status: 'aberta' as const, alterado: this.autoria() });
+      }
+    }
   }
 
   // ---------- Passos do fluxo ----------
@@ -151,6 +202,7 @@ export class Pedidos {
   private async mudar(p: Pedido, status: StatusPedido, eventos: { acao: AcaoPedido; nota?: string }[], extra: Partial<Pedido> = {}): Promise<Pedido> {
     const novo: Pedido = { ...p, ...extra, status, alterado: this.autoria(), historico: [...p.historico, ...eventos.map((e) => ({ ...e, por: this.autoria() }))] };
     await this.gravar('pedidos', novo);
+    if (status === 'cancelado' || status === 'rejeitado') await this.soltarCompras(novo);
     this.o.aoAlterar?.();
     return novo;
   }

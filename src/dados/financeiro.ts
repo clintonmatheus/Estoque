@@ -6,6 +6,7 @@ import {
 import { TABELAS, type Armazenamento, type Tabela } from '../storage/contrato';
 import { criarArmazenamentoMemoria } from '../storage/memoria';
 import type { OpcoesEstoque } from './estoque';
+import { Compras } from './compras';
 import { Pedidos } from './pedidos';
 
 type Novo<T> = Omit<T, 'id' | 'criado' | 'alterado'> & { id?: string };
@@ -51,6 +52,9 @@ export class Financeiro {
 
   /** Pedidos de pagamento (usa os mesmos cadastros e o mesmo armazenamento). */
   get pedidos() { return new Pedidos(this.a, this.usuario, this.o); }
+
+  /** Compras a faturar (fatura semanal das lojas). */
+  get compras() { return new Compras(this.a, this.usuario, this.o); }
 
   private autoria(): Autoria { return { id: this.usuario.id, nome: this.usuario.nome, em: this.o.agora() }; }
   private exigirAdmin() { if (!this.podeEditar) throw new Error('Sem permissão: só o administrador do financeiro altera cadastros'); }

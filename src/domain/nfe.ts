@@ -19,16 +19,16 @@ const decodificar = (s: string) => s.replace(/&(#x?[0-9a-fA-F]+|\w+);/g, (m, e: 
 }).trim();
 
 /** Conteúdo da primeira ocorrência de <tag>…</tag> dentro de `xml` (ignora prefixo de namespace). */
-function bloco(xml: string, tag: string): string | undefined {
+export function bloco(xml: string, tag: string): string | undefined {
   const m = xml.match(new RegExp(`<(?:\\w+:)?${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:\\w+:)?${tag}>`));
   return m?.[1];
 }
-const valorTag = (xml: string | undefined, tag: string) => {
+export const valorTag = (xml: string | undefined, tag: string) => {
   const b = xml === undefined ? undefined : bloco(xml, tag);
   return b === undefined ? undefined : decodificar(b);
 };
-const numero = (s?: string) => { const n = Number(s); return s !== undefined && s !== '' && Number.isFinite(n) ? n : undefined; };
-const dataIso = (s?: string) => s?.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+export const numero = (s?: string) => { const n = Number(s); return s !== undefined && s !== '' && Number.isFinite(n) ? n : undefined; };
+export const dataIso = (s?: string) => s?.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
 
 export function lerNfeXml(xml: string): NfeLida {
   const limpo = xml.replace(/<!--[\s\S]*?-->/g, '').replace(/^﻿/, '');

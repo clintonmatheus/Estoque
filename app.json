@@ -31,6 +31,12 @@
           "photosPermission": "O Estoque acessa suas fotos para anexar o pedido de material ao lançamento.",
           "cameraPermission": "O Estoque usa a câmera para fotografar o pedido de material."
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "O Estoque usa a câmera para ler o código de barras do boleto."
+        }
       ]
     ]
   }
