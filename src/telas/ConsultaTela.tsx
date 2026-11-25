@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Text } from 'react-native';
 import type { SaldoSimples } from '../auth/autenticacao';
 import { categoriaDoItem } from '../domain/categorias';
+import { CATEGORIA_EPI } from '../domain/tipos';
 import type { LinhaSaldo } from '../domain/filtros';
 import { Botao } from './componentes';
 import { estilos } from './estilos';
@@ -21,7 +22,7 @@ export function ConsultaTela({ carregar, hoje, versao = 0 }: Props) {
   const atualizar = useCallback(async () => {
     setErro(undefined);
     try {
-      setLinhas((await carregar()).map((s) => ({ ...s, categoria: categoriaDoItem(s) })));
+      setLinhas((await carregar()).filter((s) => s.categoria !== CATEGORIA_EPI).map((s) => ({ ...s, categoria: categoriaDoItem(s) })));
     } catch (e) {
       setErro((e as Error).message || 'Não foi possível carregar');
     }

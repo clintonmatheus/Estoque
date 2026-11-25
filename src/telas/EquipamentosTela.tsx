@@ -46,7 +46,7 @@ export function EquipamentosTela({ estoque, hoje, versao = 0, onAlterou }: Props
   const [recarregar, setRecarregar] = useState(0);
 
   useEffect(() => {
-    void Promise.all([estoque.bens(true), estoque.movimentosBens(), estoque.funcionarios(true), estoque.locais(true)])
+    void Promise.all([estoque.bens(true), estoque.movimentosBens(), estoque.funcionarios(true, 'galpao'), estoque.locais(true)])
       .then(([bens, movs, funcs, locais]) => setDados({ bens, movs, funcs, locais }));
   }, [estoque, versao, recarregar]);
   const mudou = () => { setRecarregar((n) => n + 1); onAlterou?.(); };

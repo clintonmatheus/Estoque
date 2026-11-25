@@ -35,6 +35,14 @@ export interface Item {
   categoria?: string;
   /** Custo usado quando ainda não há compra registrada (ex.: contagem inicial). */
   custoReferencia?: number;
+  /** EPI: número do Certificado de Aprovação padrão do item (sugerido ao entregar). */
+  ca?: string;
+  /** EPI: dias até a troca (a data de troca é sugerida ao entregar). */
+  vidaUtilDias?: number;
+  /** EPI: tamanhos que existem (ex.: 38, 39, 40 ou P, M, G). */
+  tamanhos?: string[];
+  /** EPI: qual tamanho do funcionário serve para este item (calçado, camisa ou luva). */
+  tipoTamanho?: TipoTamanho;
   ativo: boolean;
   criado: Autoria;
   alterado?: Autoria;
@@ -53,7 +61,29 @@ export interface Local {
   alterado?: Autoria;
 }
 
-export interface Funcionario { id: string; nome: string; ativo: boolean; criado: Autoria; alterado?: Autoria }
+/** Categoria dos itens de EPI: ficam separados dos materiais do galpão. */
+export const CATEGORIA_EPI = 'EPI';
+export const ehEpi = (i: Pick<Item, 'categoria'>) => i.categoria === CATEGORIA_EPI;
+
+export type TipoTamanho = 'calcado' | 'camisa' | 'luva';
+export const NOME_TAMANHO: Record<TipoTamanho, string> = { calcado: 'Calçado', camisa: 'Camisa', luva: 'Luva' };
+
+/**
+ * galpao: quem retira material e ferramentas do galpão; epi: quem recebe EPI.
+ * São grupos diferentes: sem grupo vale como galpão.
+ */
+export type GrupoFuncionario = 'galpao' | 'epi';
+
+export interface Funcionario {
+  id: string; nome: string; ativo: boolean; criado: Autoria; alterado?: Autoria;
+  grupo?: GrupoFuncionario;
+  /** Só números. */
+  cpf?: string;
+  funcao?: string;
+  /** Tamanhos usuais: só sugerem; na entrega pode ir outro. */
+  tamanhos?: Partial<Record<TipoTamanho, string>>;
+}
+export const grupoDoFuncionario = (f: Pick<Funcionario, 'grupo'>): GrupoFuncionario => f.grupo ?? 'galpao';
 
 /**
  * entrada: compra (ou sobra sem obra de origem) que entra no galpão;

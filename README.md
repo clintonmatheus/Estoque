@@ -40,6 +40,7 @@ As permissões foram testadas num Postgres local: `bash supabase/teste/rodar.sh`
   - O número vermelho na aba mostra quantos itens têm alerta; o filtro "Alertas" lista só eles.
 - **Aba EPI:** *Entregar* (funcionário, CA, tamanho e data de troca; baixa o estoque pelo PEPS, sem custo por centro de custo), *Trocas* (vencidos ou a vencer em 30 dias) e *Ficha do funcionário*.
 - **Mais:** Histórico, Relatórios, Cadastros e Inventário.
+- **EPI separado do material (não precisa de SQL novo):** item de EPI é o item com categoria "EPI"; funcionário de EPI é um grupo à parte de quem retira material do galpão. Ao lançar EPI só aparecem itens e funcionários de EPI, e as telas de material não mostram EPI. A aba EPI também tem *Estoque de EPI*, *Compra* e *Inventário*. Cadastros em Mais → Cadastros (*Itens de EPI* e *Funcionários de EPI*) ou pelas planilhas em Mais → Importar EPI (`modelos/Funcionarios_EPI.xlsx` e `modelos/Itens_EPI.xlsx`, gerados por `scripts/gerar_modelo_epi.py`). O cadastro do item guarda CA, vida útil (sugere a data de troca) e tamanhos; o do funcionário guarda CPF, função e tamanhos usuais, que só sugerem na entrega. Quem já recebeu EPI e nunca retirou material passa sozinho para o grupo de EPI na primeira abertura.
 - **Relatórios novos (PDF e Excel):** ferramentas e equipamentos (onde está cada um), equipamentos locados e entrega de EPI por funcionário.
 - Só admin e almoxarife veem e lançam; o consultor continua vendo apenas saldos de material.
 

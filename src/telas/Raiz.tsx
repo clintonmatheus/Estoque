@@ -20,6 +20,7 @@ import { EquipamentosTela } from './EquipamentosTela';
 import { FinanceiroTela } from './FinanceiroTela';
 import { cores, estilos } from './estilos';
 import { HistoricoTela } from './HistoricoTela';
+import { ImportarEpiTela } from './ImportarEpiTela';
 import { ImportarTela } from './ImportarTela';
 import { InventarioTela } from './InventarioTela';
 import { LancamentoTela } from './LancamentoTela';
@@ -97,11 +98,14 @@ function RaizFinanceiro({ usuario, financeiro, carregarSaldos, hoje, versao = 0,
 function RaizLancador({ usuario, estoque, financeiro, servicoFotos, saida, hoje, agora, versao = 0, estadoSync, onSincronizar, onSair, escolherPlanilha }: Props & { estoque: Estoque }) {
   const [aba, setAba] = useState<Aba>('estoque');
   const [tipo, setTipo] = useState<Lancamento['tipo']>('saida');
-  const [mais, setMais] = useState<'menu' | 'historico' | 'relatorios' | 'cadastros' | 'inventario' | 'importar' | 'financeiro'>('menu');
+  const [mais, setMais] = useState<'menu' | 'historico' | 'relatorios' | 'cadastros' | 'inventario' | 'importar' | 'importar-epi' | 'financeiro'>('menu');
   const [avisos, setAvisos] = useState({ equipamentos: 0, epi: 0 });
   const [local, setLocal] = useState(0);
   const v = versao + local;
   const alterou = () => setLocal((n) => n + 1);
+
+  // Quem já recebia EPI e nunca retirou material passa para o grupo de EPI (uma vez; seguro repetir).
+  useEffect(() => { void estoque.migrarFuncionariosEpi().then((n) => { if (n) setLocal((x) => x + 1); }).catch(() => undefined); }, [estoque]);
 
   useEffect(() => {
     void Promise.all([estoque.bens(), estoque.movimentosBens(), estoque.movimentos()]).then(([bens, movs, movimentos]) => {
@@ -115,7 +119,7 @@ function RaizLancador({ usuario, estoque, financeiro, servicoFotos, saida, hoje,
     });
   }, [estoque, hoje, v]);
 
-  const TITULOS = { historico: 'Histórico', relatorios: 'Relatórios', cadastros: 'Cadastros', inventario: 'Inventário', importar: 'Importar planilha', financeiro: 'Financeiro' } as const;
+  const TITULOS = { historico: 'Histórico', relatorios: 'Relatórios', cadastros: 'Cadastros', inventario: 'Inventário', importar: 'Importar planilha', 'importar-epi': 'Importar EPI', financeiro: 'Financeiro' } as const;
   const titulo = aba === 'mais' && mais !== 'menu' ? TITULOS[mais] : ABAS.find((a) => a.id === aba)!.titulo;
   return (
     <View style={estilos.tela}>
@@ -140,6 +144,7 @@ function RaizLancador({ usuario, estoque, financeiro, servicoFotos, saida, hoje,
         {aba === 'mais' && mais === 'relatorios' && <RelatoriosTela estoque={estoque} hoje={hoje} agora={agora} saida={saida} versao={v} />}
         {aba === 'mais' && mais === 'cadastros' && <CadastrosTela estoque={estoque} versao={v} onAlterou={alterou} />}
         {aba === 'mais' && mais === 'importar' && <ImportarTela estoque={estoque} hoje={hoje} escolherArquivo={escolherPlanilha ?? (async () => undefined)} onAlterou={alterou} />}
+        {aba === 'mais' && mais === 'importar-epi' && <ImportarEpiTela estoque={estoque} hoje={hoje} escolherArquivo={escolherPlanilha ?? (async () => undefined)} onAlterou={alterou} />}
         {aba === 'mais' && mais === 'financeiro' && financeiro && <FinanceiroTela financeiro={financeiro} versao={v} onAlterou={alterou} escolherPlanilha={escolherPlanilha} />}
         {aba === 'mais' && mais === 'inventario' && <InventarioTela estoque={estoque} hoje={hoje} versao={v} onConcluido={alterou} />}
         {aba === 'mais' && mais === 'menu' && (
@@ -147,8 +152,9 @@ function RaizLancador({ usuario, estoque, financeiro, servicoFotos, saida, hoje,
             <BarraUsuario nome={`${usuario.nome} (${usuario.papel === 'admin' ? 'administrador' : 'almoxarife'})`} estado={estadoSync} onSincronizar={onSincronizar} onSair={onSair} />
             <ItemMenu testID="abrir-historico" icone="list-outline" titulo="Histórico" sub="Lançamentos de material, correções e cancelamentos" onPress={() => setMais('historico')} />
             <ItemMenu testID="abrir-relatorios" icone="document-text-outline" titulo="Relatórios" sub="Saldo, gastos por obra, equipamentos e EPI (PDF e Excel)" onPress={() => setMais('relatorios')} />
-            <ItemMenu testID="abrir-cadastros" icone="pricetags-outline" titulo="Cadastros" sub="Itens, frentes de serviço e funcionários" onPress={() => setMais('cadastros')} />
+            <ItemMenu testID="abrir-cadastros" icone="pricetags-outline" titulo="Cadastros" sub="Itens, frentes, funcionários e EPI (itens e funcionários)" onPress={() => setMais('cadastros')} />
             <ItemMenu testID="abrir-inventario" icone="clipboard-outline" titulo="Inventário" sub="Contagem física do galpão" onPress={() => setMais('inventario')} />
+            <ItemMenu testID="abrir-importar-epi" icone="shield-checkmark-outline" titulo="Importar EPI" sub="Planilhas de funcionários de EPI e de itens de EPI" onPress={() => setMais('importar-epi')} />
             <ItemMenu testID="abrir-importar" icone="cloud-upload-outline" titulo="Importar planilha" sub="Levantamento geral: materiais, equipamentos, frentes e funcionários" onPress={() => setMais('importar')} />
             {financeiro && usuario.financeiro && (
               <ItemMenu testID="abrir-financeiro" icone="wallet-outline" titulo="Financeiro" sub="Empresas, contas, centros de custo, fornecedores e tipos de despesa" onPress={() => setMais('financeiro')} />

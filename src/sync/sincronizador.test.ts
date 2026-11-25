@@ -98,12 +98,16 @@ describe('Sincronizador', () => {
     const escora = await a.estoque.cadastrarBem({ nome: 'Escora', tipo: 'locado', controle: 'quantidade', ativo: true, locacao: { locadora: 'Agaé' } },
       { posse: { tipo: 'galpao' }, quantidade: 100, data: '2026-11-10' });
     await a.estoque.movimentarBem({ bemId: escora.id, data: '2026-11-11', quantidade: 40, origem: { tipo: 'galpao' }, destino: { tipo: 'campo', funcionarioId: joao.id, localId: local.id } });
-    await a.estoque.lancar({ tipo: 'epi', data: '2026-11-10', funcionarioId: joao.id, linhas: [{ itemId: tinta.id, quantidade: 1, ca: '77' }] });
+    const luva = await a.estoque.salvarItem({ nome: 'Luva', unidade: 'par', estoqueMinimo: 0, ativo: true, categoria: 'EPI' });
+    const ze = await a.estoque.salvarFuncionario({ nome: 'Zé', ativo: true, grupo: 'epi' });
+    await a.estoque.lancar({ tipo: 'entrada', data: '2026-11-10', linhas: [{ itemId: luva.id, quantidade: 10 }] });
+    await a.estoque.lancar({ tipo: 'epi', data: '2026-11-10', funcionarioId: ze.id, linhas: [{ itemId: luva.id, quantidade: 1, ca: '77' }] });
     await a.sync.sincronizar();
     await b.sync.sincronizar();
     expect((await b.estoque.movimentosBens())).toHaveLength(2);
     expect((await b.estoque.bens())[0].nome).toBe('ESCORA');
-    expect((await b.estoque.posicao()).itens[tinta.id].quantidade).toBe(9);
+    expect((await b.estoque.posicao()).itens[luva.id].quantidade).toBe(9);
+    expect((await b.estoque.funcionarios(false, 'epi')).map((f) => f.nome)).toEqual(['Zé']);
     // movimentação feita no outro aparelho volta para o primeiro
     await b.estoque.movimentarBem({ bemId: escora.id, data: '2026-11-12', quantidade: 10, origem: { tipo: 'galpao' }, destino: { tipo: 'externo' }, motivo: 'devolucao-locadora' });
     await b.sync.sincronizar();

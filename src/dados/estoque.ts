@@ -2,7 +2,8 @@ import { calcularPosicao, novosProblemas, type Posicao } from '../domain/estoque
 import { formatarQuantidade } from '../domain/formato';
 import { ITENS_INICIAIS } from '../domain/itensIniciais';
 import { mesmaPosse, posicoesDoBem, problemasDeBens, totalDoBem } from '../domain/bens';
-import { podeLancar, type Anexo, type Autoria, type Bem, type Funcionario, type Item, type Local, type Locacao, type Movimento, type MotivoSaidaBem, type MovimentoBem, type Posse, type TipoMovimento, type Usuario } from '../domain/tipos';
+import { cpfValido } from '../domain/nomes';
+import { ehEpi, grupoDoFuncionario, podeLancar, type GrupoFuncionario, type Anexo, type Autoria, type Bem, type Funcionario, type Item, type Local, type Locacao, type Movimento, type MotivoSaidaBem, type MovimentoBem, type Posse, type TipoMovimento, type Usuario } from '../domain/tipos';
 import { TABELAS, type Armazenamento, type Tabela } from '../storage/contrato';
 import { criarArmazenamentoMemoria } from '../storage/memoria';
 
@@ -74,12 +75,20 @@ export class Estoque {
   private alterou() { this.o.aoAlterar?.(); }
 
   // ---------- Leitura ----------
-  async itens(incluirInativos = false) { return (await this.a.itens.listar()).filter((i) => incluirInativos || i.ativo).sort(porNome); }
+  /** `grupo`: só materiais do galpão ou só EPI (sem grupo: todos). */
+  async itens(incluirInativos = false, grupo?: 'material' | 'epi') {
+    return (await this.a.itens.listar())
+      .filter((i) => (incluirInativos || i.ativo) && (!grupo || (grupo === 'epi') === ehEpi(i))).sort(porNome);
+  }
   async locais(incluirInativos = false) {
     return (await this.a.locais.listar()).filter((l) => incluirInativos || l.ativo)
       .sort((x, y) => x.centroCusto.localeCompare(y.centroCusto, 'pt-BR') || porNome(x, y));
   }
-  async funcionarios(incluirInativos = false) { return (await this.a.funcionarios.listar()).filter((f) => incluirInativos || f.ativo).sort(porNome); }
+  /** `grupo`: quem retira do galpão ou quem recebe EPI (sem grupo: todos). */
+  async funcionarios(incluirInativos = false, grupo?: GrupoFuncionario) {
+    return (await this.a.funcionarios.listar())
+      .filter((f) => (incluirInativos || f.ativo) && (!grupo || grupoDoFuncionario(f) === grupo)).sort(porNome);
+  }
   async movimentos() { return this.a.movimentos.listar(); }
   async anexos(grupo: string) { return (await this.a.anexos.listar()).filter((x) => x.grupo === grupo && !x.excluido); }
 
@@ -99,12 +108,26 @@ export class Estoque {
     if (!(n.estoqueMinimo >= 0)) throw new Error('Estoque mínimo inválido');
     const repetido = (await this.a.itens.listar()).find((i) => i.id !== n.id && i.nome === nome);
     if (repetido) throw new Error('Já existe um item com esse nome');
+    if (n.vidaUtilDias !== undefined && !(Number.isInteger(n.vidaUtilDias) && n.vidaUtilDias > 0)) throw new Error('Vida útil inválida: informe os dias até a troca');
     const atual = n.id ? await this.a.itens.obter(n.id) : undefined;
+    if (atual && ehEpi(atual) !== ehEpi(n)) {
+      const usado = (await this.a.movimentos.listar()).some((m) => m.itemId === atual.id);
+      if (usado) throw new Error('Este item já tem lançamentos: não dá para passá-lo entre EPI e material');
+    }
     const item: Item = {
       ...n, id: n.id ?? this.o.novoId(), nome, unidade: n.unidade.trim(),
       criado: atual?.criado ?? this.autoria(), ...(atual ? { alterado: this.autoria() } : {}),
     };
     if (!item.embalagem) delete item.embalagem;
+    if (ehEpi(item)) {
+      const tamanhos = [...new Set((item.tamanhos ?? []).map((t) => t.trim()).filter(Boolean))];
+      if (tamanhos.length) item.tamanhos = tamanhos; else delete item.tamanhos;
+      const ca = texto(item.ca); if (ca) item.ca = ca; else delete item.ca;
+      if (item.vidaUtilDias === undefined) delete item.vidaUtilDias;
+      if (!item.tipoTamanho) delete item.tipoTamanho;
+    } else {
+      delete item.ca; delete item.vidaUtilDias; delete item.tamanhos; delete item.tipoTamanho;
+    }
     await this.gravar('itens', item);
     this.alterou();
     return item;
@@ -138,6 +161,17 @@ export class Estoque {
       ...n, id: n.id ?? this.o.novoId(), nome,
       criado: atual?.criado ?? this.autoria(), ...(atual ? { alterado: this.autoria() } : {}),
     };
+    const cpf = texto(n.cpf)?.replace(/\D/g, '');
+    if (cpf) {
+      if (!cpfValido(cpf)) throw new Error('CPF inválido');
+      const igual = (await this.a.funcionarios.listar()).find((o) => o.id !== f.id && o.cpf === cpf && grupoDoFuncionario(o) === grupoDoFuncionario(f));
+      if (igual) throw new Error(`Este CPF já está cadastrado para ${igual.nome}`);
+      f.cpf = cpf;
+    } else delete f.cpf;
+    const funcao = texto(n.funcao); if (funcao) f.funcao = funcao; else delete f.funcao;
+    const tamanhos = Object.fromEntries(Object.entries(n.tamanhos ?? {}).map(([k, v]) => [k, texto(v)]).filter(([, v]) => v));
+    if (Object.keys(tamanhos).length) f.tamanhos = tamanhos; else delete f.tamanhos;
+    if (f.grupo !== 'epi') delete f.grupo;
     await this.gravar('funcionarios', f);
     this.alterou();
     return f;
@@ -373,11 +407,49 @@ export class Estoque {
       this.validarCampos(m);
       return m;
     });
+    await this.validarGrupos(l.tipo, novos);
     const antes = await this.a.movimentos.listar();
     await this.validarSaldo(antes, [...antes, ...novos]);
     for (const m of novos) await this.gravar('movimentos', m);
     this.alterou();
     return novos;
+  }
+
+  /** EPI e material são grupos separados: EPI só vai a funcionário de EPI e retirada só de funcionário do galpão. */
+  private async validarGrupos(tipo: TipoMovimento, movs: Movimento[]) {
+    for (const m of movs) {
+      const item = await this.a.itens.obter(m.itemId);
+      if (!item) throw new Error('Item não encontrado');
+      if (tipo === 'epi' && !ehEpi(item)) throw new Error(`${item.nome} não é um item de EPI`);
+      if (['saida', 'devolucao', 'transferencia'].includes(tipo) && ehEpi(item)) throw new Error(`${item.nome} é EPI: lance pela aba EPI`);
+      if (m.funcionarioId && (tipo === 'epi' || tipo === 'saida' || tipo === 'devolucao')) {
+        const f = await this.a.funcionarios.obter(m.funcionarioId);
+        if (!f) throw new Error('Funcionário não encontrado');
+        if (tipo === 'epi' && grupoDoFuncionario(f) !== 'epi') throw new Error(`${f.nome} não está cadastrado como funcionário de EPI`);
+        if (tipo !== 'epi' && grupoDoFuncionario(f) === 'epi') throw new Error(`${f.nome} é funcionário de EPI: não retira material do galpão`);
+      }
+    }
+  }
+
+  /**
+   * Passa para o grupo de EPI quem já recebeu EPI e nunca retirou material nem ficou com ferramenta
+   * (só se ainda não tem grupo). Seguro rodar de novo.
+   */
+  async migrarFuncionariosEpi(): Promise<number> {
+    this.exigirPermissao();
+    const movs = await this.a.movimentos.listar();
+    const bens = await this.a.movimentos_bens.listar();
+    const comEpi = new Set(movs.filter((m) => m.tipo === 'epi' && m.funcionarioId).map((m) => m.funcionarioId!));
+    const comOutro = new Set(movs.filter((m) => m.tipo !== 'epi' && m.funcionarioId).map((m) => m.funcionarioId!));
+    for (const b of bens) for (const p of [b.origem, b.destino]) if (p.tipo === 'campo') comOutro.add(p.funcionarioId);
+    let n = 0;
+    for (const f of await this.a.funcionarios.listar()) {
+      if (f.grupo || !comEpi.has(f.id) || comOutro.has(f.id)) continue;
+      await this.gravar('funcionarios', { ...f, grupo: 'epi', alterado: this.autoria() });
+      n += 1;
+    }
+    if (n) this.alterou();
+    return n;
   }
 
   private async substituir(atualizado: Movimento): Promise<Movimento> {

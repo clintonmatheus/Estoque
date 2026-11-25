@@ -2,14 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Text, View } from 'react-native';
 import type { Estoque } from '../dados/estoque';
 import { formatarDataBR } from '../domain/datas';
+import { formatarQuantidade } from '../domain/formato';
+import type { Posicao } from '../domain/estoque';
 import { epiParaTrocar, type EpiParaTrocar } from '../domain/epi';
 import type { Funcionario, Item, Movimento } from '../domain/tipos';
 import type { ServicoFotos } from '../fotos/servico';
 import { Cartao, Chips, Seletor } from './componentes';
+import { InventarioTela } from './InventarioTela';
 import { LancamentoTela } from './LancamentoTela';
 import { cores, estilos } from './estilos';
 
-type Filtro = 'entregar' | 'trocas' | 'fichas';
+type Filtro = 'entregar' | 'comprar' | 'trocas' | 'fichas' | 'saldo' | 'inventario';
 const JANELA_DIAS = 30;
 
 interface Props { estoque: Estoque; hoje: string; servicoFotos: ServicoFotos; versao?: number; onAlterou?: () => void }
@@ -21,9 +24,11 @@ export function EpiTela({ estoque, hoje, servicoFotos, versao = 0, onAlterou }: 
   const [funcs, setFuncs] = useState<Funcionario[]>([]);
   const [filtro, setFiltro] = useState<Filtro>('entregar');
   const [funcionarioId, setFuncionarioId] = useState<string>();
+  const [posicao, setPosicao] = useState<Posicao>();
 
   useEffect(() => {
-    void Promise.all([estoque.movimentos(), estoque.itens(true), estoque.funcionarios(true)]).then(([m, i, f]) => { setMovs(m); setItens(i); setFuncs(f); });
+    void Promise.all([estoque.movimentos(), estoque.itens(true, 'epi'), estoque.funcionarios(true, 'epi'), estoque.posicao()])
+      .then(([m, i, f, p]) => { setMovs(m); setItens(i); setFuncs(f); setPosicao(p); });
   }, [estoque, versao]);
 
   const nomeItem = (id: string) => itens.find((i) => i.id === id)?.nome ?? 'Item removido';
@@ -42,14 +47,47 @@ export function EpiTela({ estoque, hoje, servicoFotos, versao = 0, onAlterou }: 
   const abas = (
     <Chips prefixo="epi" valor={filtro} onMudar={setFiltro} opcoes={[
       { id: 'entregar', titulo: 'Entregar' }, { id: 'trocas', titulo: `Trocas (${trocas.length})` }, { id: 'fichas', titulo: 'Ficha do funcionário' },
+      { id: 'saldo', titulo: 'Estoque de EPI' }, { id: 'comprar', titulo: 'Compra' }, { id: 'inventario', titulo: 'Inventário' },
     ]} />
   );
-  if (filtro === 'entregar') {
+  if (filtro === 'entregar' || filtro === 'comprar') {
     return (
       <View style={{ flex: 1 }}>
         <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>{abas}</View>
-        <LancamentoTela estoque={estoque} tipo="epi" hoje={hoje} servicoFotos={servicoFotos} versao={versao} onSalvo={onAlterou} />
+        <LancamentoTela key={filtro} estoque={estoque} tipo={filtro === 'entregar' ? 'epi' : 'entrada'} epi hoje={hoje} servicoFotos={servicoFotos} versao={versao} onSalvo={onAlterou} />
       </View>
+    );
+  }
+  if (filtro === 'inventario') {
+    return (
+      <View style={{ flex: 1 }}>
+        <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>{abas}</View>
+        <InventarioTela estoque={estoque} hoje={hoje} versao={versao} onConcluido={onAlterou} epi />
+      </View>
+    );
+  }
+  if (filtro === 'saldo') {
+    return (
+      <FlatList
+        data={itens.filter((i) => i.ativo)}
+        keyExtractor={(i) => i.id}
+        contentContainerStyle={estilos.conteudo}
+        ListHeaderComponent={<View style={{ gap: 12 }}>{abas}</View>}
+        ListEmptyComponent={<Text style={estilos.subtitulo}>Nenhum EPI cadastrado. Cadastre em Mais → Cadastros → Itens de EPI ou importe a planilha.</Text>}
+        renderItem={({ item: i }) => {
+          const saldo = posicao?.itens[i.id]?.quantidade ?? 0;
+          const baixo = i.estoqueMinimo > 0 && saldo <= i.estoqueMinimo;
+          return (
+            <Cartao gap={2}>
+              <View style={estilos.linha}>
+                <Text style={[estilos.titulo, { flex: 1 }]}>{i.nome}</Text>
+                <Text testID={`saldo-epi-${i.id}`} style={{ fontWeight: '700', color: baixo ? cores.erro : cores.texto }}>{formatarQuantidade(i, saldo)}</Text>
+              </View>
+              <Text style={estilos.subtitulo}>{[i.ca && `CA ${i.ca}`, i.vidaUtilDias && `troca a cada ${i.vidaUtilDias} dias`, baixo && 'estoque baixo'].filter(Boolean).join(' · ') || ' '}</Text>
+            </Cartao>
+          );
+        }}
+      />
     );
   }
 

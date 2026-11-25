@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { posicoesDoBem } from '../domain/bens';
 import { estoqueComCadastros } from '../testes/fabricas';
+import { ABAS_EPI } from '../importacao/epi';
+import { planilha } from '../testes/planilha';
 import { Raiz } from './Raiz';
 
 const fotos = { tirarFoto: async () => undefined, escolherDaGaleria: async () => undefined };
@@ -98,8 +100,9 @@ describe('Equipamentos', () => {
 
 describe('EPI (aba própria)', () => {
   it('abre em Entregar; entrega com CA, tamanho e validade e mostra na aba de trocas', async () => {
-    const { estoque, joao } = await estoqueComCadastros();
-    const bota = await estoque.salvarItem({ nome: 'Bota', unidade: 'par', estoqueMinimo: 0, ativo: true });
+    const { estoque } = await estoqueComCadastros();
+    const joao = await estoque.salvarFuncionario({ nome: 'João EPI', ativo: true, grupo: 'epi' });
+    const bota = await estoque.salvarItem({ nome: 'Bota', unidade: 'par', estoqueMinimo: 0, ativo: true, categoria: 'EPI' });
     await estoque.lancar({ tipo: 'entrada', data: '2026-04-01', linhas: [{ itemId: bota.id, quantidade: 5, custoUnitario: 80 }] });
     await render(<Raiz {...base} usuario={estoque.usuario} estoque={estoque} />);
     await fireEvent.press(screen.getByTestId('aba-epi'));
@@ -123,11 +126,66 @@ describe('EPI (aba própria)', () => {
     expect(await screen.findByText(/CA 999 · tam\. 42 · trocar em 05\/11\/2026/)).toBeTruthy();
   });
 
+  it('só mostra itens e funcionários de EPI; sugere CA, tamanho do cadastro e data de troca; tamanho pode ser outro', async () => {
+    const { estoque, tinta } = await estoqueComCadastros();
+    const ze = await estoque.salvarFuncionario({ nome: 'José', ativo: true, grupo: 'epi', tamanhos: { calcado: '41' } });
+    const bota = await estoque.salvarItem({ nome: 'Bota', unidade: 'par', estoqueMinimo: 0, ativo: true, categoria: 'EPI', ca: '42291', vidaUtilDias: 180, tipoTamanho: 'calcado', tamanhos: ['40', '41', '42'] });
+    await estoque.lancar({ tipo: 'entrada', data: '2026-04-01', linhas: [{ itemId: bota.id, quantidade: 5 }] });
+    await render(<Raiz {...base} usuario={estoque.usuario} estoque={estoque} />);
+    await fireEvent.press(screen.getByTestId('aba-epi'));
+    await fireEvent.press(await screen.findByTestId('adicionar-item'));
+    expect(await screen.findByTestId(`item-opcao-${bota.id}`)).toBeTruthy();
+    expect(screen.queryByTestId(`item-opcao-${tinta.id}`)).toBeNull(); // material do galpão não aparece
+    await fireEvent.press(screen.getByTestId(`item-opcao-${bota.id}`));
+    await fireEvent.press(screen.getByTestId('funcionario'));
+    expect(screen.queryByTestId('funcionario-opcao-' + (await estoque.funcionarios(false, 'galpao'))[0].id)).toBeNull(); // quem retira material não aparece
+    await fireEvent.press(await screen.findByTestId(`funcionario-opcao-${ze.id}`));
+    expect(screen.getByTestId(`ca-${bota.id}`).props.value).toBe('42291');
+    expect(screen.getByTestId(`tamanho-${bota.id}`).props.value).toBe('41');
+    expect(screen.getByTestId(`validade-${bota.id}`).props.value).toBe('10/05/2027'); // hoje (11/11/2026) + 180 dias
+    await fireEvent.press(screen.getByTestId(`tam-${bota.id}-42`)); // entrega outro tamanho
+    await fireEvent.changeText(screen.getByTestId(`qtd-${bota.id}`), '1');
+    await fireEvent.press(screen.getByTestId('salvar'));
+    expect(await screen.findByTestId('ok')).toHaveTextContent('Entrega de EPI registrada (1 item).');
+    const [m] = (await estoque.movimentos()).filter((x) => x.tipo === 'epi');
+    expect(m).toMatchObject({ ca: '42291', tamanho: '42', validade: '2027-05-10', funcionarioId: ze.id });
+  });
+
   it('Lançar não tem mais a opção EPI', async () => {
     const { estoque } = await estoqueComCadastros();
     await render(<Raiz {...base} usuario={estoque.usuario} estoque={estoque} />);
     await fireEvent.press(screen.getByTestId('aba-lancar'));
     expect(screen.queryByTestId('tipo-epi')).toBeNull();
     expect(screen.getByTestId('tipo-saida')).toBeTruthy();
+  });
+});
+
+describe('EPI: cadastros e importação pela tela', () => {
+  it('cadastra funcionário de EPI com tamanhos e importa itens pela planilha', async () => {
+    const { estoque } = await estoqueComCadastros();
+    let arquivo = await planilha({ 'Itens EPI': [[...ABAS_EPI.itens.colunas], ['Capacete', 'un', '123', 365, undefined, undefined, 2, 8]] });
+    await render(<Raiz {...base} usuario={estoque.usuario} estoque={estoque} escolherPlanilha={async () => arquivo} />);
+    await fireEvent.press(screen.getByTestId('aba-mais'));
+    await fireEvent.press(screen.getByTestId('abrir-cadastros'));
+    await fireEvent.press(await screen.findByTestId('aba-func-epi'));
+    await fireEvent.press(screen.getByTestId('novo'));
+    await fireEvent.changeText(screen.getByTestId('nome'), 'Maria');
+    await fireEvent.changeText(screen.getByTestId('cpf'), '529.982.247-25');
+    await fireEvent.changeText(screen.getByTestId('funcao'), 'Servente');
+    await fireEvent.changeText(screen.getByTestId('tam-calcado'), '38');
+    await fireEvent.press(screen.getByTestId('salvar-cadastro'));
+    expect(await screen.findByText('Servente · 529.982.247-25 · calçado 38')).toBeTruthy();
+    expect((await estoque.funcionarios(true, 'galpao')).map((f) => f.nome)).toEqual(['João']);
+
+    await fireEvent.press(screen.getByTestId('aba-mais'));
+    await fireEvent.press(await screen.findByTestId('abrir-importar-epi'));
+    await fireEvent.press(screen.getByTestId('escolher-planilha-epi'));
+    expect(await screen.findByText('• 1 item(ns) de EPI novo(s)')).toBeTruthy();
+    expect(screen.getByText('• 1 item(ns) com saldo inicial')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('confirmar-importacao-epi'));
+    expect(await screen.findByText(/Importação concluída: 1 item\(ns\) de EPI novo\(s\); 1 item\(ns\) com saldo inicial/)).toBeTruthy();
+    const cap = (await estoque.itens(true, 'epi'))[0];
+    expect(cap).toMatchObject({ nome: 'CAPACETE', ca: '123', vidaUtilDias: 365, estoqueMinimo: 2 });
+    expect((await estoque.posicao()).itens[cap.id].quantidade).toBe(8);
   });
 });

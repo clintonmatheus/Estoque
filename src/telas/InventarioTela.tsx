@@ -8,10 +8,10 @@ import type { Item } from '../domain/tipos';
 import { Botao, Campo, Cartao, filtrar, Mensagem } from './componentes';
 import { cores, estilos } from './estilos';
 
-interface Props { estoque: Estoque; hoje: string; versao?: number; onConcluido?: () => void }
+interface Props { estoque: Estoque; hoje: string; versao?: number; onConcluido?: () => void; /** Conta só os itens de EPI (sem isto, só os materiais). */ epi?: boolean }
 
 /** Contagem física: digita o que foi contado; o app gera ajustes para as diferenças. */
-export function InventarioTela({ estoque, hoje, versao = 0, onConcluido }: Props) {
+export function InventarioTela({ estoque, hoje, versao = 0, onConcluido, epi = false }: Props) {
   const [itens, setItens] = useState<Item[]>([]);
   const [posicao, setPosicao] = useState<Posicao>();
   const [contado, setContado] = useState<Record<string, string>>({});
@@ -22,8 +22,8 @@ export function InventarioTela({ estoque, hoje, versao = 0, onConcluido }: Props
   const [ok, setOk] = useState<string>();
 
   useEffect(() => {
-    void Promise.all([estoque.itens(), estoque.posicao()]).then(([i, p]) => { setItens(i); setPosicao(p); });
-  }, [estoque, versao]);
+    void Promise.all([estoque.itens(false, epi ? 'epi' : 'material'), estoque.posicao()]).then(([i, p]) => { setItens(i); setPosicao(p); });
+  }, [estoque, versao, epi]);
 
   const saldo = (id: string) => posicao?.itens[id]?.quantidade ?? 0;
   const custo = (i: Item) => {

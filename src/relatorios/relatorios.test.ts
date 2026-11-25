@@ -95,9 +95,10 @@ describe('relatórios da etapa 2', () => {
   });
 
   it('ficha de EPI por funcionário, sem entregas canceladas, filtrável por funcionário', async () => {
-    const { estoque, joao } = await estoqueComCadastros();
-    const maria = await estoque.salvarFuncionario({ nome: 'Maria', ativo: true });
-    const bota = await estoque.salvarItem({ nome: 'Bota', unidade: 'par', estoqueMinimo: 0, ativo: true });
+    const { estoque } = await estoqueComCadastros();
+    const joao = await estoque.salvarFuncionario({ nome: 'João', ativo: true, grupo: 'epi' });
+    const maria = await estoque.salvarFuncionario({ nome: 'Maria', ativo: true, grupo: 'epi' });
+    const bota = await estoque.salvarItem({ nome: 'Bota', unidade: 'par', estoqueMinimo: 0, ativo: true, categoria: 'EPI' });
     await estoque.lancar({ tipo: 'entrada', data: '2026-11-01', linhas: [{ itemId: bota.id, quantidade: 10, custoUnitario: 80 }] });
     await estoque.lancar({ tipo: 'epi', data: '2026-11-05', funcionarioId: maria.id, linhas: [{ itemId: bota.id, quantidade: 1, ca: '555', tamanho: '38', validade: '2027-05-05' }] });
     await estoque.lancar({ tipo: 'epi', data: '2026-11-06', funcionarioId: joao.id, linhas: [{ itemId: bota.id, quantidade: 1, tamanho: '42' }] });

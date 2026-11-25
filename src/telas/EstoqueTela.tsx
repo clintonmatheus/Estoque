@@ -22,7 +22,7 @@ export function EstoqueTela({ estoque, hoje, versao = 0 }: Props) {
   useEffect(() => {
     let ativo = true;
     (async () => {
-      const [i, p, m, l] = await Promise.all([estoque.itens(), estoque.posicao(), estoque.movimentos(), estoque.locais(true)]);
+      const [i, p, m, l] = await Promise.all([estoque.itens(false, 'material'), estoque.posicao(), estoque.movimentos(), estoque.locais(true)]);
       if (ativo) { setItens(i); setPosicao(p); setMovs(m); setLocais(l); }
     })();
     return () => { ativo = false; };

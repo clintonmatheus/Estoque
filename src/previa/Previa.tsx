@@ -53,7 +53,9 @@ async function montar(): Promise<Estoque> {
   const joao = await e.salvarFuncionario({ nome: 'João Batista (mestre)', ativo: true });
   const carlos = await e.salvarFuncionario({ nome: 'Carlos Lima (encarregado)', ativo: true });
   await e.salvarFuncionario({ nome: 'Pedro Santos', ativo: true });
-  const bota = await e.salvarItem({ nome: 'BOTA DE SEGURANÇA', unidade: 'par', estoqueMinimo: 4, ativo: true, categoria: 'EPI' });
+  const ze = await e.salvarFuncionario({ nome: 'José Almeida', ativo: true, grupo: 'epi', funcao: 'Servente', tamanhos: { calcado: '41', camisa: 'G', luva: 'G' } });
+  const ana = await e.salvarFuncionario({ nome: 'Antônio Costa', ativo: true, grupo: 'epi', funcao: 'Pedreiro', tamanhos: { calcado: '42', camisa: 'M', luva: 'M' } });
+  const bota = await e.salvarItem({ nome: 'BOTA DE SEGURANÇA', unidade: 'par', estoqueMinimo: 4, ativo: true, categoria: 'EPI', vidaUtilDias: 180, tipoTamanho: 'calcado', tamanhos: ['38', '39', '40', '41', '42', '43'] });
   const luva = await e.salvarItem({ nome: 'LUVA DE VAQUETA', unidade: 'par', estoqueMinimo: 10, ativo: true, categoria: 'EPI' });
 
   const comPreco = itens.filter((i) => i.custoReferencia).slice(0, 30);
@@ -67,8 +69,8 @@ async function montar(): Promise<Estoque> {
   await e.lancar({ tipo: 'saida', data: '2026-11-10', localId: riach.id, funcionarioId: joao.id, linhas: [{ itemId: tinta.id, quantidade: 3 }, { itemId: comPreco[4].id, quantidade: 2 }] });
   await e.lancar({ tipo: 'saida', data: '2026-11-18', localId: ubs.id, funcionarioId: carlos.id, observacao: 'Pedido pelo WhatsApp', linhas: [{ itemId: comPreco[8].id, quantidade: 4 }] });
   await e.lancar({ tipo: 'devolucao', data: '2026-11-20', localId: riach.id, funcionarioId: joao.id, linhas: [{ itemId: tinta.id, quantidade: 1 }] });
-  await e.lancar({ tipo: 'epi', data: '2026-05-20', funcionarioId: joao.id, linhas: [{ itemId: bota.id, quantidade: 1, ca: '42291', tamanho: '41', validade: '2026-11-20' }] });
-  await e.lancar({ tipo: 'epi', data: '2026-11-05', funcionarioId: carlos.id, linhas: [{ itemId: luva.id, quantidade: 2, ca: '31478', tamanho: 'G', validade: '2026-12-05' }] });
+  await e.lancar({ tipo: 'epi', data: '2026-05-20', funcionarioId: ze.id, linhas: [{ itemId: bota.id, quantidade: 1, ca: '42291', tamanho: '41', validade: '2026-11-20' }] });
+  await e.lancar({ tipo: 'epi', data: '2026-11-05', funcionarioId: ana.id, linhas: [{ itemId: luva.id, quantidade: 2, ca: '31478', tamanho: 'G', validade: '2026-12-05' }] });
 
   const galpao: Posse = { tipo: 'galpao' };
   const campo = (f: string, l: string): Posse => ({ tipo: 'campo', funcionarioId: f, localId: l });

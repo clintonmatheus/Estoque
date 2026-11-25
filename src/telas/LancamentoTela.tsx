@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import type { Estoque, Lancamento } from '../dados/estoque';
-import { analisarDataBR, formatarDataBR } from '../domain/datas';
+import { adicionarDias, analisarDataBR, formatarDataBR } from '../domain/datas';
 import type { Posicao } from '../domain/estoque';
 import { formatarMoeda, formatarQuantidade, lerNumero, paraUnidadeBase } from '../domain/formato';
 import type { Funcionario, Item, Local } from '../domain/tipos';
@@ -12,7 +12,7 @@ import { cores, estilos } from './estilos';
 
 type Tipo = Lancamento['tipo'];
 
-interface Linha { chave: number; itemId: string; qtd: string; emEmbalagem: boolean; custo: string; ca: string; tamanho: string; validade: string }
+interface Linha { chave: number; itemId: string; qtd: string; emEmbalagem: boolean; custo: string; ca: string; tamanho: string; validade: string; tamanhoManual?: boolean; validadeManual?: boolean }
 
 interface Props {
   estoque: Estoque;
@@ -21,6 +21,8 @@ interface Props {
   servicoFotos: ServicoFotos;
   versao?: number;
   onSalvo?: () => void;
+  /** Lança só itens de EPI (entrega ou compra de EPI); sem isto, só materiais do galpão. */
+  epi?: boolean;
 }
 
 const DICA: Record<Tipo, string> = {
@@ -28,14 +30,14 @@ const DICA: Record<Tipo, string> = {
   saida: 'Material saindo do galpão para uma frente de serviço.',
   devolucao: 'Sobra voltando de uma frente de serviço para o galpão. O valor é abatido da frente.',
   transferencia: 'Material passando de uma frente para outra, sem voltar ao galpão.',
-  epi: 'EPI entregue a um funcionário. Baixa o estoque do galpão; não entra no custo das frentes de serviço.',
+  epi: 'EPI entregue a um funcionário de EPI. Baixa o estoque de EPI; não entra no custo das frentes de serviço.',
 };
 
 const opcaoLocal = (l: Local) => ({ id: l.id, titulo: l.nome, subtitulo: l.centroCusto });
 
 let chaves = 0;
 
-export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, onSalvo }: Props) {
+export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, onSalvo, epi = tipo === 'epi' }: Props) {
   const [itens, setItens] = useState<Item[]>([]);
   const [locais, setLocais] = useState<Local[]>([]);
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
@@ -57,21 +59,49 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
   useEffect(() => {
     let ativo = true;
     (async () => {
-      const [i, l, f, p] = await Promise.all([estoque.itens(), estoque.locais(), estoque.funcionarios(), estoque.posicao()]);
+      const [i, l, f, p] = await Promise.all([estoque.itens(false, epi ? 'epi' : 'material'), estoque.locais(), estoque.funcionarios(false, epi ? 'epi' : 'galpao'), estoque.posicao()]);
       if (!ativo) return;
       setItens(i); setLocais(l); setFuncionarios(f); setPosicao(p);
     })();
     return () => { ativo = false; };
-  }, [estoque, versao]);
+  }, [estoque, versao, epi]);
 
   const item = (id: string) => itens.find((i) => i.id === id);
+
+  /** Sugestões da entrega de EPI: CA do item, tamanho usual do funcionário e data de troca pela vida útil. */
+  function sugestoes(it: Item | undefined, funcId: string | undefined, dataTexto: string) {
+    const f = funcionarios.find((x) => x.id === funcId);
+    let validade = '';
+    if (it?.vidaUtilDias) {
+      try { validade = formatarDataBR(adicionarDias(analisarDataBR(dataTexto), it.vidaUtilDias)); } catch { validade = ''; }
+    }
+    return { ca: it?.ca ?? '', tamanho: (it?.tipoTamanho && f?.tamanhos?.[it.tipoTamanho]) || '', validade };
+  }
 
   function adicionar(itemId: string) {
     setEscolhendo(false);
     setOk(undefined);
     const ultimo = posicao?.itens[itemId]?.ultimoCusto ?? item(itemId)?.custoReferencia;
-    setLinhas((ls) => [...ls, { chave: ++chaves, itemId, qtd: '', emEmbalagem: false, custo: tipo === 'entrada' && ultimo ? String(ultimo).replace('.', ',') : '', ca: '', tamanho: '', validade: '' }]);
+    const sug = tipo === 'epi' ? sugestoes(item(itemId), funcionarioId, data) : { ca: '', tamanho: '', validade: '' };
+    setLinhas((ls) => [...ls, { chave: ++chaves, itemId, qtd: '', emEmbalagem: false, custo: tipo === 'entrada' && ultimo ? String(ultimo).replace('.', ',') : '', ...sug }]);
   }
+
+  // Trocou o funcionário ou a data: refaz as sugestões que a pessoa ainda não alterou.
+  useEffect(() => {
+    if (tipo !== 'epi') return;
+    setLinhas((ls) => {
+      let mudou = false;
+      const novas = ls.map((ln) => {
+        const sug = sugestoes(item(ln.itemId), funcionarioId, data);
+        const n = { ...ln };
+        if (!ln.tamanhoManual && ln.tamanho !== sug.tamanho) { n.tamanho = sug.tamanho; mudou = true; }
+        if (!ln.validadeManual && ln.validade !== sug.validade) { n.validade = sug.validade; mudou = true; }
+        return n;
+      });
+      return mudou ? novas : ls;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [funcionarioId, data, tipo, funcionarios, itens]);
   const mudar = (chave: number, campo: Partial<Linha>) => setLinhas((ls) => ls.map((l) => (l.chave === chave ? { ...l, ...campo } : l)));
 
   /** Quantidade que a frente de origem tem (devolução/transferência) ou o saldo do galpão. */
@@ -79,7 +109,7 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
     if ((tipo === 'devolucao' || tipo === 'transferencia') && localId) {
       return `Na frente: ${formatarQuantidade(it, posicao?.locais[localId]?.[it.id]?.quantidade ?? 0)}`;
     }
-    return `Saldo no galpão: ${formatarQuantidade(it, posicao?.itens[it.id]?.quantidade ?? 0)}`;
+    return `${epi ? 'Saldo de EPI' : 'Saldo no galpão'}: ${formatarQuantidade(it, posicao?.itens[it.id]?.quantidade ?? 0)}`;
   }
 
   async function anexar(origem: 'camera' | 'galeria') {
@@ -129,7 +159,7 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
 
   return (
     <ScrollView contentContainerStyle={estilos.conteudo} keyboardShouldPersistTaps="handled">
-      <Text style={estilos.subtitulo}>{DICA[tipo]}</Text>
+      <Text style={estilos.subtitulo}>{tipo === 'entrada' && epi ? 'Compra de EPI (com nota fiscal) entrando no estoque de EPI.' : DICA[tipo]}</Text>
       <Cartao>
         <Campo testID="data" rotulo="Data" value={data} onChangeText={setData} keyboardType="numbers-and-punctuation" placeholder="dd/mm/aaaa" />
         {tipo === 'entrada' && (
@@ -147,7 +177,7 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
             opcoes={locais.filter((l) => l.id !== localId).map(opcaoLocal)} onEscolher={setDestinoId} />
         )}
         {(tipo === 'saida' || tipo === 'devolucao' || tipo === 'epi') && (
-          <Seletor testID="funcionario" rotulo={tipo === 'saida' ? 'Quem retirou' : tipo === 'epi' ? 'Funcionário que recebeu' : 'Quem devolveu (opcional)'} valor={funcionarioId}
+          <Seletor testID="funcionario" rotulo={tipo === 'saida' ? 'Quem retirou' : tipo === 'epi' ? 'Funcionário que recebeu o EPI' : 'Quem devolveu (opcional)'} valor={funcionarioId}
             opcoes={funcionarios.map((f) => ({ id: f.id, titulo: f.nome }))} onEscolher={setFuncionarioId} />
         )}
       </Cartao>
@@ -179,9 +209,18 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
               <>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <Campo testID={`ca-${it.id}`} rotulo="Nº do CA" value={ln.ca} onChangeText={(v) => mudar(ln.chave, { ca: v })} keyboardType="number-pad" style={{ flex: 1 }} placeholder="Opcional" />
-                  <Campo testID={`tamanho-${it.id}`} rotulo="Tamanho" value={ln.tamanho} onChangeText={(v) => mudar(ln.chave, { tamanho: v })} style={{ flex: 1 }} placeholder="Ex.: 42, G" />
+                  <Campo testID={`tamanho-${it.id}`} rotulo={`Tamanho${it.tipoTamanho && funcionarios.find((x) => x.id === funcionarioId)?.tamanhos?.[it.tipoTamanho] ? ' (sugerido pelo cadastro)' : ''}`} value={ln.tamanho} onChangeText={(v) => mudar(ln.chave, { tamanho: v, tamanhoManual: true })} style={{ flex: 1 }} placeholder="Ex.: 42, G" />
                 </View>
-                <Campo testID={`validade-${it.id}`} rotulo="Trocar em (validade)" value={ln.validade} onChangeText={(v) => mudar(ln.chave, { validade: v })}
+                {!!it.tamanhos?.length && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {it.tamanhos.map((t) => (
+                      <Pressable key={t} testID={`tam-${it.id}-${t}`} onPress={() => mudar(ln.chave, { tamanho: t, tamanhoManual: true })} style={[estilos.chip, ln.tamanho === t && estilos.chipAtivo]}>
+                        <Text style={[estilos.chipTexto, ln.tamanho === t && estilos.chipTextoAtivo]}>{t}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+                <Campo testID={`validade-${it.id}`} rotulo={`Trocar em (validade)${it.vidaUtilDias ? ` — sugerido: ${it.vidaUtilDias} dias` : ''}`} value={ln.validade} onChangeText={(v) => mudar(ln.chave, { validade: v, validadeManual: true })}
                   keyboardType="numbers-and-punctuation" placeholder="dd/mm/aaaa (opcional)" />
               </>
             )}
@@ -201,7 +240,7 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
         );
       })}
       <Botao testID="adicionar-item" titulo="+ Adicionar item" secundario onPress={() => setEscolhendo(true)} />
-      <ListaEscolha visivel={escolhendo} titulo="Escolha o item" opcoes={opcoesItens} testID="item"
+      <ListaEscolha visivel={escolhendo} titulo={epi ? 'Escolha o EPI' : 'Escolha o item'} opcoes={opcoesItens} testID="item"
         onEscolher={adicionar} onFechar={() => setEscolhendo(false)} />
       {total !== undefined && linhas.length > 0 && <Text testID="total" style={estilos.valor}>{`Total: ${formatarMoeda(total)}`}</Text>}
 
