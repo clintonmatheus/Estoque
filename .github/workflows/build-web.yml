@@ -3,10 +3,9 @@ name: Publicar versão para computador (web)
 on:
   workflow_dispatch:
 
+# Publica na ramificação gh-pages. No GitHub: Settings → Pages → Source: Deploy from a branch → gh-pages / (root)
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -15,9 +14,6 @@ concurrency:
 jobs:
   web:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.publicar.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -31,10 +27,13 @@ jobs:
           node -e "const f='app.json';const c=require('./'+f);c.expo.experiments={baseUrl:'/${{ github.event.repository.name }}'};require('fs').writeFileSync(f,JSON.stringify(c,null,2))"
       - run: npx expo export --platform web --output-dir dist
       - run: cp dist/index.html dist/404.html
-      # O GitHub Pages precisa estar ligado antes: Settings → Pages → Source: GitHub Actions
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
-        with:
-          path: dist
-      - id: publicar
-        uses: actions/deploy-pages@v4
+      - name: Publicar na ramificação gh-pages
+        run: |
+          touch dist/.nojekyll
+          cd dist
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Publicar versão web (${GITHUB_SHA::7})"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
