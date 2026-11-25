@@ -51,11 +51,15 @@ describe('Raiz', () => {
     expect(screen.queryByTestId('aba-locais')).toBeNull();
   });
 
-  it('solicitante com acesso aos saldos (Caio, Augusto) vê os saldos do galpão, sem valores, e os pedidos', async () => {
+  it('solicitante com acesso aos saldos (Caio, Augusto) vê saldos do galpão sem valores, ferramentas e pedidos', async () => {
     const carregar = jest.fn(async () => [{ itemId: 't', nome: 'TINTA', unidade: 'lata', estoqueMinimo: 2, saldo: 1 }]);
     const caio = { id: 'u-caio', nome: 'Caio', papel: 'saldos' as const, financeiro: 'solicitante' as const };
-    const fin = financeiroDeTeste(caio).financeiro;
-    await render(<Raiz {...base} usuario={caio} financeiro={fin} carregarSaldos={carregar} />);
+    const c = await estoqueComCadastros();
+    await c.estoque.cadastrarBem({ nome: 'Betoneira', tipo: 'locado', controle: 'unidade', ativo: true, locacao: { locadora: 'Agaé', valor: 300, periodo: 'mes' } },
+      { posse: { tipo: 'galpao' }, quantidade: 1, data: '2026-11-10' });
+    const doCaio = new Estoque(c.armazenamento, caio, { agora: () => '2026-11-11T12:00:00.000Z', novoId: () => 'x' });
+    const fin = financeiroDeTeste(caio, c.armazenamento).financeiro;
+    await render(<Raiz {...base} usuario={caio} estoque={doCaio} financeiro={fin} carregarSaldos={carregar} />);
     expect(screen.getByTestId('pilar-pagamentos')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('pilar-estoque'));
     expect(await screen.findByText('TINTA')).toBeTruthy();
@@ -63,6 +67,12 @@ describe('Raiz', () => {
     expect(screen.queryByText(/R\$/)).toBeNull();
     expect(screen.queryByTestId('aba-lancar')).toBeNull();
     expect(screen.queryByTestId('aba-mais')).toBeNull();
+    await fireEvent.press(screen.getByTestId('secao-ferramentas'));
+    await fireEvent.press(await screen.findByText('BETONEIRA'));
+    expect(await screen.findByText('Galpão')).toBeTruthy();
+    expect(screen.queryByText(/R\$/)).toBeNull();
+    expect(screen.queryByTestId('novo-bem')).toBeNull();
+    expect(screen.queryByTestId('registrar-mov')).toBeNull();
   });
 
   it('quem não tem acesso a nenhum pilar vê o aviso para pedir liberação', async () => {

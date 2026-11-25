@@ -2,7 +2,7 @@
 -- Quem ainda não tem login (Augusto e Daniel): crie antes em Authentication → Users → Add user (marque "Auto Confirm User")
 -- e troque EMAIL_DO_AUGUSTO e EMAIL_DO_DANIEL pelos e-mails reais. Linhas cujo e-mail ou nome não existe são ignoradas.
 --
--- papel (estoque): admin, almoxarife, controle (EPI/ferramentas/locações), consultor (vê tudo), saldos (só saldos do galpão), nenhum
+-- papel (estoque): admin, almoxarife, controle (EPI/ferramentas/locações), consultor (vê tudo), saldos (saldos do galpão e ferramentas), nenhum
 -- financeiro (pagamentos): admin (aprova e vê o Financeiro), pagador (confere e paga), solicitante (pede)
 -- paga: true para quem registra pagamentos (o pagador já paga; entre os administradores, só o Clinton)
 

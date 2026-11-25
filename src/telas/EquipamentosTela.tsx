@@ -35,10 +35,10 @@ function alertasDoBem(b: Bem, d: Dados, hoje: string): string[] {
   return lista;
 }
 
-interface Props { estoque: Estoque; hoje: string; versao?: number; onAlterou?: () => void; /** Só consulta (sem cadastrar nem movimentar). */ leitura?: boolean }
+interface Props { estoque: Estoque; hoje: string; versao?: number; onAlterou?: () => void; /** Só consulta (sem cadastrar nem movimentar). */ leitura?: boolean; /** Esconde o valor das locações. */ semValores?: boolean }
 
 /** Ferramentas e equipamentos locados: onde está cada um, quem está com ele e todas as movimentações. */
-export function EquipamentosTela({ estoque, hoje, versao = 0, onAlterou, leitura = false }: Props) {
+export function EquipamentosTela({ estoque, hoje, versao = 0, onAlterou, leitura = false, semValores = false }: Props) {
   const [dados, setDados] = useState<Dados>({ bens: [], movs: [], funcs: [], locais: [] });
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [busca, setBusca] = useState('');
@@ -72,7 +72,7 @@ export function EquipamentosTela({ estoque, hoje, versao = 0, onAlterou, leitura
       onFim={() => { mudou(); setModo({ tela: 'detalhe', id: bem.id }); }} />;
   }
   if (modo.tela === 'detalhe' && bem) {
-    return <Detalhe estoque={estoque} bem={bem} dados={dados} hoje={hoje} leitura={leitura} onVoltar={() => setModo({ tela: 'lista' })} onEditar={() => setModo({ tela: 'editar', id: bem.id })} onAlterou={mudou} />;
+    return <Detalhe estoque={estoque} bem={bem} dados={dados} hoje={hoje} leitura={leitura} semValores={semValores} onVoltar={() => setModo({ tela: 'lista' })} onEditar={() => setModo({ tela: 'editar', id: bem.id })} onAlterou={mudou} />;
   }
 
   return (
@@ -121,8 +121,8 @@ export function EquipamentosTela({ estoque, hoje, versao = 0, onAlterou, leitura
 type Destino = 'galpao' | 'campo' | 'locadora' | 'perda' | 'baixa';
 const MOTIVO: Record<Exclude<Destino, 'galpao' | 'campo'>, MotivoSaidaBem> = { locadora: 'devolucao-locadora', perda: 'perda', baixa: 'baixa' };
 
-function Detalhe({ estoque, bem, dados, hoje, leitura, onVoltar, onEditar, onAlterou }: {
-  estoque: Estoque; bem: Bem; dados: Dados; hoje: string; leitura: boolean; onVoltar: () => void; onEditar: () => void; onAlterou: () => void;
+function Detalhe({ estoque, bem, dados, hoje, leitura, semValores, onVoltar, onEditar, onAlterou }: {
+  estoque: Estoque; bem: Bem; dados: Dados; hoje: string; leitura: boolean; semValores: boolean; onVoltar: () => void; onEditar: () => void; onAlterou: () => void;
 }) {
   const posicoes = posicoesDoBem(dados.movs, bem.id);
   const unidade = bem.controle === 'unidade';
@@ -199,7 +199,7 @@ function Detalhe({ estoque, bem, dados, hoje, leitura, onVoltar, onEditar, onAlt
         {l && (
           <>
             <Text style={estilos.subtitulo}>{`Locadora: ${l.locadora}${l.contrato ? ` · contrato ${l.contrato}` : ''}`}</Text>
-            {l.valor !== undefined && <Text style={estilos.subtitulo}>{`${formatarMoeda(l.valor)} por peça, por ${porPeriodo(l.periodo)}`}</Text>}
+            {l.valor !== undefined && !semValores && <Text style={estilos.subtitulo}>{`${formatarMoeda(l.valor)} por peça, por ${porPeriodo(l.periodo)}`}</Text>}
             {(l.inicio || l.prevista) && <Text style={estilos.subtitulo}>{`${l.inicio ? `Desde ${formatarDataBR(l.inicio)}` : ''}${l.inicio && l.prevista ? ' · ' : ''}${l.prevista ? `fim previsto ${formatarDataBR(l.prevista)}` : ''}`}</Text>}
             {l.localCobrancaId && <Text style={estilos.subtitulo}>{`Cobrado na obra: ${dados.locais.find((x) => x.id === l.localCobrancaId)?.nome ?? '?'}`}</Text>}
           </>

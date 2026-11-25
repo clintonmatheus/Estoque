@@ -23,3 +23,23 @@ do $$ begin
 end $$;
 reset role;
 \echo 'Saldos e remoção de login OK'
+\i supabase/012_saldos_ferramentas.sql
+\i supabase/012_saldos_ferramentas.sql
+insert into public.bens (id, dados) values ('f-bet', '{"id":"f-bet","nome":"BETONEIRA","ativo":true}');
+insert into public.movimentos_bens (id, dados) values ('f-mb', '{"id":"f-mb","bemId":"f-bet","quantidade":1}');
+insert into public.funcionarios (id, dados) values ('f-g', '{"id":"f-g","nome":"JOAO","ativo":true}'), ('f-e', '{"id":"f-e","nome":"ZE","ativo":true,"grupo":"epi","cpf":"1"}');
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000c5', false);
+do $$ begin
+  assert (select count(*) from public.bens where id = 'f-bet') = 1, 'saldos vê ferramentas';
+  assert (select count(*) from public.movimentos_bens where id = 'f-mb') = 1, 'saldos vê onde estão';
+  assert (select count(*) from public.funcionarios where id = 'f-g') = 1, 'saldos vê funcionário do galpão';
+  assert (select count(*) from public.funcionarios where id = 'f-e') = 0, 'FALHA: saldos viu funcionário de EPI';
+  assert (select count(*) from public.itens) = 0, 'saldos continua sem ler itens';
+  begin
+    insert into public.bens (id, dados) values ('f-x', '{"id":"f-x","nome":"X"}');
+    raise exception 'FALHA: saldos cadastrou ferramenta';
+  exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+\echo 'Ferramentas para saldos OK'

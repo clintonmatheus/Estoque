@@ -97,13 +97,13 @@ export function Raiz(p: Props) {
     }).catch(() => undefined);
   }, [financeiro, usuario, v]);
 
-  const nomePilar = atual === 'estoque' && soSaldos(usuario) ? 'Saldos do galpão' : atual === 'estoque' && titulo ? titulo.texto : PILARES[atual].titulo;
+  const nomePilar = atual === 'estoque' && soSaldos(usuario) ? 'Estoque' : atual === 'estoque' && titulo ? titulo.texto : PILARES[atual].titulo;
   return (
     <View style={estilos.tela}>
       <Cabecalho titulo={atual === 'pagamentos' ? 'Pagamentos' : nomePilar} subtitulo={`${usuario.nome} · ${textoSync(estadoSync)}`}
         rotuloVoltar="Mais" onVoltar={atual === 'estoque' ? titulo?.voltar : undefined} />
       <View style={{ flex: 1 }}>
-        {atual === 'estoque' && soSaldos(usuario) && <ConsultaTela carregar={p.carregarSaldos} hoje={hoje} versao={v} />}
+        {atual === 'estoque' && soSaldos(usuario) && <PilarSaldos {...p} versao={v} />}
         {atual === 'estoque' && !soSaldos(usuario) && estoque && (
           <PilarEstoque {...p} estoque={estoque} versao={v} onAlterou={alterou} onTitulo={setTitulo} onAvisos={(n) => setAvisos((a) => (a.estoque === n ? a : { ...a, estoque: n }))} />
         )}
@@ -247,6 +247,24 @@ function PilarEstoque({ usuario, estoque, servicoFotos, saida, hoje, agora, vers
 }
 
 // ------------------------------------------------------------------------------------------------
+// Estoque de quem pede pagamentos (Caio, Augusto): saldos do galpão e onde estão as ferramentas
+
+function PilarSaldos({ estoque, carregarSaldos, hoje, versao = 0 }: Props) {
+  const [secao, setSecao] = useState<'saldos' | 'ferramentas'>('saldos');
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+        <Chips prefixo="secao" valor={secao} onMudar={setSecao} opcoes={[{ id: 'saldos', titulo: 'Saldos do galpão' }, ...(estoque ? [{ id: 'ferramentas' as const, titulo: 'Ferramentas' }] : [])]} />
+      </View>
+      <View style={{ flex: 1 }}>
+        {secao === 'saldos' && <ConsultaTela carregar={carregarSaldos} hoje={hoje} versao={versao} />}
+        {secao === 'ferramentas' && estoque && <EquipamentosTela estoque={estoque} hoje={hoje} versao={versao} leitura semValores />}
+      </View>
+    </View>
+  );
+}
+
+// ------------------------------------------------------------------------------------------------
 // Pilar Pagamentos: pedidos de pagamento e compras a faturar
 
 function PilarPagamentos({ financeiro, servicoFotos, hoje, versao, onAlterou }: {
@@ -270,7 +288,7 @@ function PilarPagamentos({ financeiro, servicoFotos, hoje, versao, onAlterou }: 
 // Conta: quem é, o que pode fazer, sincronização e sair
 
 const NOME_ESTOQUE: Record<Usuario['papel'], string> = {
-  admin: 'administrador (tudo)', almoxarife: 'almoxarife (tudo)', controle: 'EPI, ferramentas e locações', consultor: 'consulta', saldos: 'saldos do galpão', nenhum: 'sem acesso',
+  admin: 'administrador (tudo)', almoxarife: 'almoxarife (tudo)', controle: 'EPI, ferramentas e locações', consultor: 'consulta', saldos: 'saldos do galpão e ferramentas', nenhum: 'sem acesso',
 };
 
 function ContaTela({ usuario, estadoSync, onSincronizar, onSair, semAcesso }: Props & { semAcesso: boolean }) {
