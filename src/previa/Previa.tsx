@@ -21,7 +21,7 @@ const MARILIA: Usuario = { id: 'u-marilia', nome: 'Marilia', papel: 'almoxarife'
 const ARTHUR: Usuario = { id: 'u-arthur', nome: 'Arthur', papel: 'consultor', financeiro: 'admin' };
 const CLINTON: Usuario = { id: 'u-clinton', nome: 'Clinton', papel: 'admin', financeiro: 'admin', paga: true };
 const JOANA: Usuario = { id: 'u-joana', nome: 'Joana', papel: 'controle', financeiro: 'pagador' };
-const CAIO: Usuario = { id: 'u-caio', nome: 'Caio', papel: 'nenhum', financeiro: 'solicitante' };
+const CAIO: Usuario = { id: 'u-caio', nome: 'Caio', papel: 'saldos', financeiro: 'solicitante' };
 const PERFIS: Record<string, Usuario> = { consultor: ARTHUR, financeiro: CLINTON, pagador: JOANA, solicitante: CAIO, almoxarife: MARILIA };
 
 const armazenamento = criarArmazenamentoMemoria();
