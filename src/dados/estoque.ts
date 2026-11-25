@@ -1,6 +1,7 @@
 import { calcularPosicao, novosProblemas, type Posicao } from '../domain/estoque';
 import { formatarQuantidade } from '../domain/formato';
 import { ITENS_INICIAIS } from '../domain/itensIniciais';
+import { controlaTamanho, normalizarTamanho, problemasDeTamanho, saldosPorTamanho } from '../domain/epi';
 import { mesmaPosse, posicoesDoBem, problemasDeBens, totalDoBem } from '../domain/bens';
 import { cpfValido } from '../domain/nomes';
 import { ehEpi, grupoDoFuncionario, operaControle, podeLancar, type GrupoFuncionario, type Anexo, type Autoria, type Bem, type Funcionario, type Item, type Local, type Locacao, type Movimento, type MotivoSaidaBem, type MovimentoBem, type Posse, type TipoMovimento, type Usuario } from '../domain/tipos';
@@ -31,7 +32,8 @@ export interface Lancamento {
 export type CamposEditaveis = Partial<Pick<Movimento,
   'data' | 'quantidade' | 'custoUnitario' | 'notaFiscal' | 'fornecedor' | 'localId' | 'localDestinoId' | 'funcionarioId' | 'observacao' | 'ca' | 'tamanho' | 'validade'>>;
 
-export interface Contagem { itemId: string; contado: number }
+/** Contagem do inventário. Item de EPI com tamanhos: uma contagem por tamanho. */
+export interface Contagem { itemId: string; contado: number; tamanho?: string }
 
 type NovoItem = Omit<Item, 'id' | 'criado' | 'alterado'> & { id?: string };
 type NovoLocal = Omit<Local, 'id' | 'criado' | 'alterado'> & { id?: string };
@@ -369,6 +371,7 @@ export class Estoque {
 
   // ---------- Movimentos ----------
   private async validarSaldo(antes: Movimento[], depois: Movimento[]) {
+    await this.validarSaldoPorTamanho(antes, depois);
     const problemas = novosProblemas(antes, depois, await this.custosReferencia());
     if (!problemas.length) return;
     const p = problemas[0];
@@ -380,6 +383,39 @@ export class Estoque {
       throw new Error(`Quantidade maior que a entregue: ${nome} — ${local?.nome ?? 'a frente'} tem ${qtd}`);
     }
     throw new Error(`Saldo insuficiente: ${nome} — disponível ${qtd}`);
+  }
+
+  /** EPI com tamanhos: nenhum tamanho pode ficar negativo. */
+  private async validarSaldoPorTamanho(antes: Movimento[], depois: Movimento[]) {
+    const itens = (await this.a.itens.listar()).filter(controlaTamanho);
+    if (!itens.length) return;
+    const ids = new Set(itens.map((i) => i.id));
+    const chave = (x: { movimentoId: string; tamanho: string }) => `${x.movimentoId}|${x.tamanho}`;
+    const ja = new Set(problemasDeTamanho(antes, ids).map(chave));
+    const p = problemasDeTamanho(depois, ids).find((x) => !ja.has(chave(x)));
+    if (!p) return;
+    const item = itens.find((i) => i.id === p.itemId)!;
+    throw new Error(`Saldo insuficiente: ${item.nome} ${p.tamanho ? `tamanho ${p.tamanho}` : 'sem tamanho informado'} — disponível ${formatarQuantidade(item, p.disponivel)}`);
+  }
+
+  /** Tamanho obrigatório e cadastrado no item (na entrada, tamanho novo é acrescentado à lista do item). */
+  private tamanhoDaLinha(item: Item, tipo: TipoMovimento, tamanho: string | undefined, novos: Map<string, Set<string>>): string | undefined {
+    if (!controlaTamanho(item) || !['entrada', 'epi', 'ajuste'].includes(tipo)) return tamanho?.trim() || undefined;
+    const t = normalizarTamanho(tamanho);
+    if (!t) throw new Error(`Informe o tamanho de ${item.nome}`);
+    const lista = (item.tamanhos ?? []).map(normalizarTamanho);
+    if (!lista.includes(t)) {
+      if (tipo !== 'entrada') throw new Error(`${item.nome} não tem o tamanho ${t} cadastrado (tamanhos: ${lista.join(', ')})`);
+      novos.set(item.id, (novos.get(item.id) ?? new Set()).add(t));
+    }
+    return t;
+  }
+
+  private async acrescentarTamanhos(novos: Map<string, Set<string>>) {
+    for (const [id, ts] of novos) {
+      const item = await this.a.itens.obter(id);
+      if (item) await this.gravar('itens', { ...item, tamanhos: [...(item.tamanhos ?? []), ...ts], alterado: this.autoria() });
+    }
   }
 
   private validarCampos(m: Pick<Movimento, 'tipo' | 'data' | 'quantidade' | 'custoUnitario' | 'localId' | 'localDestinoId' | 'funcionarioId' | 'validade'>) {
@@ -403,10 +439,15 @@ export class Estoque {
     if (!l.linhas.length) throw new Error('Inclua pelo menos um item');
     const grupo = this.o.novoId();
     const criado = this.autoria();
+    const cadastro = new Map((await this.a.itens.listar()).map((i) => [i.id, i]));
+    const tamanhosNovos = new Map<string, Set<string>>();
     const novos: Movimento[] = l.linhas.map((ln) => {
       const m: Movimento = {
         id: this.o.novoId(), grupo, tipo: l.tipo, data: l.data, itemId: ln.itemId, quantidade: ln.quantidade, criado,
       };
+      const it = cadastro.get(ln.itemId);
+      const tam = it && controlaTamanho(it) ? this.tamanhoDaLinha(it, l.tipo, ln.tamanho, tamanhosNovos) : undefined;
+      if (tam) m.tamanho = tam;
       if (l.tipo === 'entrada') {
         m.custoUnitario = ln.custoUnitario ?? 0; // sem valor: material antigo, só catalogado
         if (texto(l.notaFiscal)) m.notaFiscal = texto(l.notaFiscal);
@@ -418,7 +459,7 @@ export class Estoque {
       if (texto(l.observacao)) m.observacao = texto(l.observacao);
       if (l.tipo === 'epi') {
         if (texto(ln.ca)) m.ca = texto(ln.ca);
-        if (texto(ln.tamanho)) m.tamanho = texto(ln.tamanho);
+        if (!m.tamanho && texto(ln.tamanho)) m.tamanho = texto(ln.tamanho);
         if (texto(ln.validade)) m.validade = texto(ln.validade);
       }
       this.validarCampos(m);
@@ -427,6 +468,7 @@ export class Estoque {
     await this.validarGrupos(l.tipo, novos);
     const antes = await this.a.movimentos.listar();
     await this.validarSaldo(antes, [...antes, ...novos]);
+    await this.acrescentarTamanhos(tamanhosNovos);
     for (const m of novos) await this.gravar('movimentos', m);
     this.alterou();
     return novos;
@@ -490,6 +532,10 @@ export class Estoque {
     for (const k of ['notaFiscal', 'fornecedor', 'observacao', 'ca', 'tamanho', 'validade'] as const) {
       if (k in campos) { const v = texto(campos[k]); if (v) m[k] = v; else delete m[k]; }
     }
+    if ('tamanho' in campos) {
+      const item = await this.a.itens.obter(m.itemId);
+      if (item && controlaTamanho(item)) { const t = this.tamanhoDaLinha(item, m.tipo === 'entrada' ? 'epi' : m.tipo, campos.tamanho, new Map()); if (t) m.tamanho = t; }
+    }
     this.validarCampos(m);
     return this.substituir(m);
   }
@@ -526,15 +572,29 @@ export class Estoque {
   async registrarInventario(data: string, contagens: Contagem[]): Promise<Movimento[]> {
     await this.exigirItens(contagens.map((c) => c.itemId));
     const pos = await this.posicao();
+    const cadastro = new Map((await this.a.itens.listar()).map((i) => [i.id, i]));
+    const porTamanho = saldosPorTamanho(await this.a.movimentos.listar());
     const grupo = this.o.novoId();
     const criado = this.autoria();
     const ajustes: Movimento[] = [];
+    const contadosPorTamanho = new Set<string>();
+    const ajustar = (itemId: string, diferenca: number, tamanho?: string, observacao = 'Inventário') => {
+      const d = Math.round(diferenca * 1000) / 1000;
+      if (d !== 0) ajustes.push({ id: this.o.novoId(), grupo, tipo: 'ajuste', data, itemId, quantidade: d, observacao, criado, ...(tamanho ? { tamanho } : {}) });
+    };
     for (const c of contagens) {
       if (!(c.contado >= 0)) throw new Error('Quantidade contada inválida');
-      const diferenca = Math.round((c.contado - (pos.itens[c.itemId]?.quantidade ?? 0)) * 1000) / 1000;
-      if (diferenca === 0) continue;
-      ajustes.push({ id: this.o.novoId(), grupo, tipo: 'ajuste', data, itemId: c.itemId, quantidade: diferenca, observacao: 'Inventário', criado });
+      const item = cadastro.get(c.itemId);
+      if (item && controlaTamanho(item)) {
+        const t = this.tamanhoDaLinha(item, 'ajuste', c.tamanho, new Map())!;
+        ajustar(c.itemId, c.contado - (porTamanho.get(c.itemId)?.get(t) ?? 0), t);
+        contadosPorTamanho.add(c.itemId);
+      } else {
+        ajustar(c.itemId, c.contado - (pos.itens[c.itemId]?.quantidade ?? 0));
+      }
     }
+    // Contou por tamanho: o que estava lançado sem tamanho (antes do controle por tamanho) é zerado.
+    for (const id of contadosPorTamanho) ajustar(id, -(porTamanho.get(id)?.get('') ?? 0), undefined, 'Inventário (saldo sem tamanho)');
     if (!ajustes.length) return [];
     const antes = await this.a.movimentos.listar();
     await this.validarSaldo(antes, [...antes, ...ajustes]);

@@ -103,3 +103,6 @@ O rodapé mostra só os pilares a que a pessoa tem acesso: **Estoque** (materiai
 | Caio, Augusto | nenhum | solicitante: pede | — | não |
 
 As mesmas regras valem no servidor (RLS): o controle só grava itens/lançamentos de EPI, funcionários, ferramentas e locações; o consultor só lê; só quem `paga` marca um pedido como pago; arquivos de pedidos e compras ficam visíveis só para pagador/administrador e para quem os lançou. Login novo começa sem acesso (`nenhum`) até o administrador definir o perfil.
+
+## EPI por tamanho
+Item de EPI com "tamanhos disponíveis" tem o saldo separado por tamanho: a compra, a entrega e o inventário pedem o tamanho, e nenhum tamanho pode ficar negativo. Na planilha de itens de EPI, o saldo inicial de um item com tamanhos é escrito assim: `38: 2; 39: 3; 40: 4`. Saldo antigo, lançado antes do controle por tamanho, aparece como "sem tamanho" e é zerado no primeiro inventário de EPI contado por tamanho.

@@ -4,7 +4,7 @@ import type { Estoque } from '../dados/estoque';
 import { formatarDataBR } from '../domain/datas';
 import { formatarQuantidade } from '../domain/formato';
 import type { Posicao } from '../domain/estoque';
-import { epiParaTrocar, type EpiParaTrocar } from '../domain/epi';
+import { controlaTamanho, epiParaTrocar, saldosPorTamanho, textoPorTamanho, type EpiParaTrocar } from '../domain/epi';
 import type { Funcionario, Item, Movimento } from '../domain/tipos';
 import type { ServicoFotos } from '../fotos/servico';
 import { Cartao, Chips, Seletor } from './componentes';
@@ -31,6 +31,7 @@ export function EpiTela({ estoque, hoje, servicoFotos, versao = 0, onAlterou, le
       .then(([m, i, f, p]) => { setMovs(m); setItens(i); setFuncs(f); setPosicao(p); });
   }, [estoque, versao]);
 
+  const porTamanho = useMemo(() => saldosPorTamanho(movs, new Set(itens.filter(controlaTamanho).map((i) => i.id))), [movs, itens]);
   const nomeItem = (id: string) => itens.find((i) => i.id === id)?.nome ?? 'Item removido';
   const nomeFunc = (id?: string) => funcs.find((f) => f.id === id)?.nome ?? '—';
 
@@ -83,6 +84,7 @@ export function EpiTela({ estoque, hoje, servicoFotos, versao = 0, onAlterou, le
                 <Text style={[estilos.titulo, { flex: 1 }]}>{i.nome}</Text>
                 <Text testID={`saldo-epi-${i.id}`} style={{ fontWeight: '700', color: baixo ? cores.erro : cores.texto }}>{formatarQuantidade(i, saldo)}</Text>
               </View>
+              {controlaTamanho(i) && <Text testID={`tamanhos-epi-${i.id}`} style={[estilos.subtitulo, { color: cores.texto, fontWeight: '600' }]}>{textoPorTamanho(i, porTamanho.get(i.id))}</Text>}
               <Text style={estilos.subtitulo}>{[i.ca && `CA ${i.ca}`, i.vidaUtilDias && `troca a cada ${i.vidaUtilDias} dias`, baixo && 'estoque baixo'].filter(Boolean).join(' · ') || ' '}</Text>
             </Cartao>
           );

@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { estoqueComCadastros } from '../testes/fabricas';
 import { planilha } from '../testes/planilha';
+import { saldosPorTamanho } from '../domain/epi';
 import { ABAS_EPI, importarEpi, lerEpi, simularEpi } from './epi';
 import { lerXlsx } from './lerXlsx';
 
@@ -25,7 +26,7 @@ describe('planilhas de EPI', () => {
     const galpao = await estoque.salvarFuncionario({ nome: 'José Almeida', ativo: true }); // mesmo nome, outro grupo
     const bytes = await planilha({
       'Funcionários EPI': [cab('funcionarios'), ['José Almeida', '123.456.789-09', 'Servente', 41, 'G', 'G'], ['Ana', 12345678909 + 1, undefined, undefined, undefined, undefined, 'Inativo']],
-      'Itens EPI': [cab('itens'), ['Bota de segurança', 'par', '42291', 180, '38; 39; 40; 41', 'Calçado', 4, 10, 89.9], ['Capacete', 'un']],
+      'Itens EPI': [cab('itens'), ['Bota de segurança', 'par', '42291', 180, '38; 39; 40; 41', 'Calçado', 4, '38: 2; 39: 3; 40: 4; 41: 1', 89.9], ['Capacete', 'un']],
     });
     const d = lerEpi(await lerXlsx(bytes));
     expect(d.erros).toEqual([]);
@@ -48,6 +49,7 @@ describe('planilhas de EPI', () => {
     expect(bota).toMatchObject({ categoria: 'EPI', ca: '42291', vidaUtilDias: 180, tamanhos: ['38', '39', '40', '41'], tipoTamanho: 'calcado', estoqueMinimo: 4 });
     expect((await estoque.itens(true, 'material')).map((i) => i.nome)).not.toContain('BOTA DE SEGURANÇA');
     expect((await estoque.posicao()).itens[bota.id].quantidade).toBe(10);
+    expect(saldosPorTamanho(await estoque.movimentos()).get(bota.id)).toEqual(new Map([['38', 2], ['39', 3], ['40', 4], ['41', 1]]));
 
     // segunda vez: nada novo; saldo que já existe é erro claro
     const de_novo = await simularEpi(estoque, d, '2026-11-25');
@@ -83,5 +85,17 @@ describe('planilhas de EPI', () => {
     expect(r).toMatchObject({ funcionarios: 0, funcionariosAtualizados: 1 });
     const c = (await estoque.funcionarios(true, 'epi')).find((x) => x.id === f.id)!;
     expect(c).toMatchObject({ funcao: 'Pedreiro', tamanhos: { calcado: '42', camisa: 'M' } });
+  });
+  it('saldo por tamanho: "38: 2; 39: 3" acrescenta os tamanhos; número solto em item com tamanhos é recusado', async () => {
+    const bytes = await planilha({
+      'Itens EPI': [cab('itens'),
+        ['Bota', 'par', '1', 180, undefined, 'Calçado', 0, '38: 2; 39=3; 40 - 4', 90],
+        ['Luva', 'par', '2', 30, 'P; M; G', 'Luva', 0, 9, 5],
+        ['Óculos', 'un', '3', 365, undefined, undefined, 0, 5, 12]],
+    });
+    const d = lerEpi(await lerXlsx(bytes));
+    expect(d.erros.map((e) => `${e.linha}: ${e.mensagem}`)).toEqual(['3: Item com tamanhos: informe o saldo de cada tamanho, ex.: "P: 1; M: 2; G: 3"']);
+    expect(d.itens[0]).toMatchObject({ tamanhos: ['38', '39', '40'], saldo: 9, saldoPorTamanho: [{ tamanho: '38', quantidade: 2 }, { tamanho: '39', quantidade: 3 }, { tamanho: '40', quantidade: 4 }] });
+    expect(d.itens[1]).toMatchObject({ nome: 'Óculos', saldo: 5 });
   });
 });

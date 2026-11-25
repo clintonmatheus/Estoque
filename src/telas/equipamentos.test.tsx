@@ -3,6 +3,7 @@ import { posicoesDoBem } from '../domain/bens';
 import { estoqueComCadastros } from '../testes/fabricas';
 import { ABAS_EPI } from '../importacao/epi';
 import { planilha } from '../testes/planilha';
+import { saldosPorTamanho } from '../domain/epi';
 import { Raiz } from './Raiz';
 
 const fotos = { tirarFoto: async () => undefined, escolherDaGaleria: async () => undefined };
@@ -130,7 +131,7 @@ describe('EPI (aba própria)', () => {
     const { estoque, tinta } = await estoqueComCadastros();
     const ze = await estoque.salvarFuncionario({ nome: 'José', ativo: true, grupo: 'epi', tamanhos: { calcado: '41' } });
     const bota = await estoque.salvarItem({ nome: 'Bota', unidade: 'par', estoqueMinimo: 0, ativo: true, categoria: 'EPI', ca: '42291', vidaUtilDias: 180, tipoTamanho: 'calcado', tamanhos: ['40', '41', '42'] });
-    await estoque.lancar({ tipo: 'entrada', data: '2026-04-01', linhas: [{ itemId: bota.id, quantidade: 5 }] });
+    await estoque.lancar({ tipo: 'entrada', data: '2026-04-01', linhas: [{ itemId: bota.id, quantidade: 5, tamanho: '42' }, { itemId: bota.id, quantidade: 1, tamanho: '41' }] });
     await render(<Raiz {...base} usuario={estoque.usuario} estoque={estoque} />);
     await fireEvent.press(screen.getByTestId('aba-epi'));
     await fireEvent.press(await screen.findByTestId('adicionar-item'));
@@ -149,6 +150,36 @@ describe('EPI (aba própria)', () => {
     expect(await screen.findByTestId('ok')).toHaveTextContent('Entrega de EPI registrada (1 item).');
     const [m] = (await estoque.movimentos()).filter((x) => x.tipo === 'epi');
     expect(m).toMatchObject({ ca: '42291', tamanho: '42', validade: '2027-05-10', funcionarioId: ze.id });
+    await fireEvent.press(screen.getByTestId('epi-saldo'));
+    expect(await screen.findByTestId(`tamanhos-epi-${bota.id}`)).toHaveTextContent('40: 0 · 41: 1 · 42: 4');
+  });
+
+  it('compra e inventário de EPI por tamanho', async () => {
+    const { estoque } = await estoqueComCadastros();
+    const bota = await estoque.salvarItem({ nome: 'Bota', unidade: 'par', estoqueMinimo: 0, ativo: true, categoria: 'EPI', tamanhos: ['38', '39', '40'] });
+    await render(<Raiz {...base} usuario={estoque.usuario} estoque={estoque} />);
+    await fireEvent.press(screen.getByTestId('aba-epi'));
+    await fireEvent.press(screen.getByTestId('epi-comprar'));
+    for (const [t, q] of [['39', '3'], ['40', '4']]) {
+      await fireEvent.press(await screen.findByTestId('adicionar-item'));
+      await fireEvent.press(await screen.findByTestId(`item-opcao-${bota.id}`));
+      const linhas = screen.getAllByTestId(`tam-${bota.id}-${t}`);
+      await fireEvent.press(linhas[linhas.length - 1]);
+      const qtds = screen.getAllByTestId(`qtd-${bota.id}`);
+      await fireEvent.changeText(qtds[qtds.length - 1], q);
+    }
+    await fireEvent.press(screen.getByTestId('salvar'));
+    expect(await screen.findByTestId('ok')).toBeTruthy();
+    expect(saldosPorTamanho(await estoque.movimentos()).get(bota.id)).toEqual(new Map([['39', 3], ['40', 4]]));
+
+    await fireEvent.press(screen.getByTestId('epi-inventario'));
+    await fireEvent.changeText(await screen.findByTestId(`contado-${bota.id}-38`), '2');
+    await fireEvent.changeText(screen.getByTestId(`contado-${bota.id}-40`), '4');
+    await fireEvent.press(screen.getByTestId('revisar-inventario'));
+    expect(await screen.findByText('BOTA · tamanho 38')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('confirmar-inventario'));
+    expect(await screen.findByText('Inventário registrado: 1 ajuste(s).')).toBeTruthy();
+    expect(saldosPorTamanho(await estoque.movimentos()).get(bota.id)).toEqual(new Map([['39', 3], ['40', 4], ['38', 2]]));
   });
 
   it('Lançar não tem mais a opção EPI', async () => {

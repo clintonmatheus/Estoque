@@ -5,6 +5,7 @@ import { analisarDataBR, formatarDataBR } from '../domain/datas';
 import type { Posicao } from '../domain/estoque';
 import { formatarMoeda, formatarQuantidade, lerNumero } from '../domain/formato';
 import type { Item } from '../domain/tipos';
+import { controlaTamanho, normalizarTamanho, saldosPorTamanho } from '../domain/epi';
 import { Botao, Campo, Cartao, filtrar, Mensagem } from './componentes';
 import { cores, estilos } from './estilos';
 
@@ -14,6 +15,7 @@ interface Props { estoque: Estoque; hoje: string; versao?: number; onConcluido?:
 export function InventarioTela({ estoque, hoje, versao = 0, onConcluido, epi = false }: Props) {
   const [itens, setItens] = useState<Item[]>([]);
   const [posicao, setPosicao] = useState<Posicao>();
+  const [porTamanho, setPorTamanho] = useState<Map<string, Map<string, number>>>(new Map());
   const [contado, setContado] = useState<Record<string, string>>({});
   const [busca, setBusca] = useState('');
   const [data, setData] = useState(formatarDataBR(hoje));
@@ -22,37 +24,43 @@ export function InventarioTela({ estoque, hoje, versao = 0, onConcluido, epi = f
   const [ok, setOk] = useState<string>();
 
   useEffect(() => {
-    void Promise.all([estoque.itens(false, epi ? 'epi' : 'material'), estoque.posicao()]).then(([i, p]) => { setItens(i); setPosicao(p); });
+    void Promise.all([estoque.itens(false, epi ? 'epi' : 'material'), estoque.posicao(), estoque.movimentos()]).then(([i, p, m]) => {
+      setItens(i); setPosicao(p); setPorTamanho(saldosPorTamanho(m, new Set(i.filter(controlaTamanho).map((x) => x.id))));
+    });
   }, [estoque, versao, epi]);
 
   const saldo = (id: string) => posicao?.itens[id]?.quantidade ?? 0;
+  /** Cada campo de contagem: o item inteiro ou um tamanho dele (EPI com tamanhos). */
+  const campos = useMemo(() => itens.flatMap((i) => (controlaTamanho(i)
+    ? i.tamanhos!.map((t) => ({ chave: `${i.id}|${normalizarTamanho(t)}`, item: i, tamanho: normalizarTamanho(t), sistema: porTamanho.get(i.id)?.get(normalizarTamanho(t)) ?? 0 }))
+    : [{ chave: i.id, item: i, tamanho: undefined as string | undefined, sistema: posicao?.itens[i.id]?.quantidade ?? 0 }])), [itens, porTamanho, posicao]);
   const custo = (i: Item) => {
     const s = posicao?.itens[i.id];
     return s && s.quantidade > 0 ? s.valor / s.quantidade : s?.ultimoCusto || i.custoReferencia || 0;
   };
-  const diferencas = useMemo(() => itens.flatMap((i) => {
-    const c = lerNumero(contado[i.id] ?? '');
+  const diferencas = useMemo(() => campos.flatMap((k) => {
+    const c = lerNumero(contado[k.chave] ?? '');
     if (c === undefined) return [];
-    const d = Math.round((c - saldo(i.id)) * 1000) / 1000;
-    return d ? [{ item: i, contado: c, diferenca: d }] : [];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [itens, contado, posicao]);
+    const d = Math.round((c - k.sistema) * 1000) / 1000;
+    return d ? [{ ...k, contado: c, diferenca: d }] : [];
+  }), [campos, contado]);
   const preenchidos = Object.values(contado).filter((v) => v.trim()).length;
 
   async function confirmar() {
     setErro(undefined);
     try {
-      const contagens = itens.flatMap((i) => {
-        const t = contado[i.id] ?? '';
+      const contagens = campos.flatMap((k) => {
+        const t = contado[k.chave] ?? '';
         if (!t.trim()) return [];
         const c = lerNumero(t);
-        if (c === undefined || c < 0) throw new Error(`Quantidade inválida em ${i.nome}`);
-        return [{ itemId: i.id, contado: c }];
+        if (c === undefined || c < 0) throw new Error(`Quantidade inválida em ${k.item.nome}`);
+        return [{ itemId: k.item.id, contado: c, ...(k.tamanho ? { tamanho: k.tamanho } : {}) }];
       });
       const aj = await estoque.registrarInventario(analisarDataBR(data), contagens);
       setOk(aj.length ? `Inventário registrado: ${aj.length} ajuste(s).` : 'Inventário conferido: nenhuma diferença.');
       setContado({}); setRevisando(false);
       setPosicao(await estoque.posicao());
+      setPorTamanho(saldosPorTamanho(await estoque.movimentos(), new Set(itens.filter(controlaTamanho).map((x) => x.id))));
       onConcluido?.();
     } catch (e) {
       setErro((e as Error).message);
@@ -62,7 +70,7 @@ export function InventarioTela({ estoque, hoje, versao = 0, onConcluido, epi = f
   if (revisando) {
     const total = diferencas.reduce((t, d) => t + d.diferenca * custo(d.item), 0);
     return (
-      <FlatList data={diferencas} keyExtractor={(d) => d.item.id} contentContainerStyle={estilos.conteudo}
+      <FlatList data={diferencas} keyExtractor={(d) => d.chave} contentContainerStyle={estilos.conteudo}
         ListHeaderComponent={
           <Cartao>
             <Text style={estilos.titulo}>{`Conferência de ${data}`}</Text>
@@ -73,9 +81,9 @@ export function InventarioTela({ estoque, hoje, versao = 0, onConcluido, epi = f
         ListEmptyComponent={<Text style={estilos.subtitulo}>Nenhuma diferença: o contado bate com o sistema.</Text>}
         renderItem={({ item: d }) => (
           <View style={estilos.card}>
-            <Text style={estilos.titulo}>{d.item.nome}</Text>
+            <Text style={estilos.titulo}>{d.tamanho ? `${d.item.nome} · tamanho ${d.tamanho}` : d.item.nome}</Text>
             <Text style={[estilos.subtitulo, { color: d.diferenca < 0 ? cores.erro : cores.ok }]}>
-              {`Sistema ${formatarQuantidade(d.item, saldo(d.item.id))} → contado ${formatarQuantidade(d.item, d.contado)} (${d.diferenca > 0 ? '+' : ''}${formatarQuantidade(d.item, d.diferenca)})`}
+              {`Sistema ${formatarQuantidade(d.item, d.sistema)} → contado ${formatarQuantidade(d.item, d.contado)} (${d.diferenca > 0 ? '+' : ''}${formatarQuantidade(d.item, d.diferenca)})`}
             </Text>
           </View>
         )}
@@ -91,8 +99,8 @@ export function InventarioTela({ estoque, hoje, versao = 0, onConcluido, epi = f
 
   return (
     <FlatList
-      data={filtrar(itens, busca, (i) => i.nome)}
-      keyExtractor={(i) => i.id}
+      data={filtrar(campos, busca, (k) => k.item.nome)}
+      keyExtractor={(k) => k.chave}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={estilos.conteudo}
       ListHeaderComponent={
@@ -107,14 +115,14 @@ export function InventarioTela({ estoque, hoje, versao = 0, onConcluido, epi = f
           <Mensagem ok={ok} />
         </View>
       }
-      renderItem={({ item: i }) => (
+      renderItem={({ item: k }) => (
         <View style={[estilos.card, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
           <View style={{ flex: 1 }}>
-            <Text style={estilos.titulo}>{i.nome}</Text>
-            <Text style={estilos.subtitulo}>{`Sistema: ${formatarQuantidade(i, saldo(i.id))}`}</Text>
+            <Text style={estilos.titulo}>{k.tamanho ? `${k.item.nome} · tamanho ${k.tamanho}` : k.item.nome}</Text>
+            <Text style={estilos.subtitulo}>{`Sistema: ${formatarQuantidade(k.item, k.sistema)}`}{k.tamanho && (porTamanho.get(k.item.id)?.get('') ?? 0) ? ` · sem tamanho: ${porTamanho.get(k.item.id)?.get('')} (zera ao contar)` : ''}</Text>
           </View>
-          <TextInput testID={`contado-${i.id}`} style={[estilos.entrada, { width: 90, textAlign: 'center' }]} placeholder={i.unidade}
-            keyboardType="decimal-pad" value={contado[i.id] ?? ''} onChangeText={(v) => setContado((c) => ({ ...c, [i.id]: v }))} />
+          <TextInput testID={k.tamanho ? `contado-${k.item.id}-${k.tamanho}` : `contado-${k.item.id}`} style={[estilos.entrada, { width: 90, textAlign: 'center' }]} placeholder={k.item.unidade}
+            keyboardType="decimal-pad" value={contado[k.chave] ?? ''} onChangeText={(v) => setContado((c) => ({ ...c, [k.chave]: v }))} />
         </View>
       )}
       ListFooterComponent={

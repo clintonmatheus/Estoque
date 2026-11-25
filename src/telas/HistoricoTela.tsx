@@ -233,7 +233,7 @@ function DetalheLancamento({ estoque, podeAlterar, grupo, itens, locais, funcion
             <Text style={estilos.subtitulo}>
               {`${it ? formatarQuantidade(it, m.quantidade) : m.quantidade}${c ? ` · ${formatarMoeda(c.custoUnitario)}/${it?.unidade ?? 'un'} · ${formatarMoeda(c.valor)}` : ''}`}
             </Text>
-            {m.tipo === 'epi' && (m.ca || m.tamanho || m.validade) && (
+            {(m.ca || m.tamanho || m.validade) && (
               <Text style={estilos.subtitulo}>
                 {[m.ca && `CA ${m.ca}`, m.tamanho && `tamanho ${m.tamanho}`, m.validade && `trocar em ${formatarDataBR(m.validade)}`].filter(Boolean).join(' · ')}
               </Text>

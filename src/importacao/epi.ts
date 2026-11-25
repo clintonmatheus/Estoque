@@ -1,4 +1,5 @@
 import type { Estoque } from '../dados/estoque';
+import { lerSaldoPorTamanho, normalizarTamanho } from '../domain/epi';
 import { CATEGORIA_EPI, ehEpi, grupoDoFuncionario, type Funcionario, type Item, type TipoTamanho } from '../domain/tipos';
 import type { Abas } from './lerXlsx';
 import { linhasDaAba, normalizar, numero, opcao, texto, type ErroImportacao } from './levantamento';
@@ -20,6 +21,8 @@ export interface LinhaFuncionarioEpi {
 export interface LinhaItemEpi {
   linha: number; nome: string; unidade?: string; ca?: string; vidaUtilDias?: number; tamanhos?: string[]; tipoTamanho?: TipoTamanho;
   minimo?: number; saldo?: number; custo?: number;
+  /** Saldo inicial por tamanho ("38: 2; 39: 3; 40: 4"). */
+  saldoPorTamanho?: { tamanho: string; quantidade: number }[];
 }
 export interface DadosEpi { funcionarios: LinhaFuncionarioEpi[]; itens: LinhaItemEpi[]; erros: ErroImportacao[] }
 export interface ResumoEpi {
@@ -65,12 +68,22 @@ export function lerEpi(abas: Abas): DadosEpi {
       const vida = numero(v('Vida útil (dias)'));
       if (vida !== undefined) { if (!Number.isInteger(vida) || vida <= 0) throw new Error('Vida útil: informe os dias até a troca (número inteiro)'); i.vidaUtilDias = vida; }
       const tam = texto(v('Tamanhos disponíveis'));
-      if (tam) i.tamanhos = [...new Set(tam.split(/[;,/]/).map((t) => t.trim()).filter(Boolean))];
+      if (tam) i.tamanhos = [...new Set(tam.split(/[;,/]/).map(normalizarTamanho).filter(Boolean))];
       const tipo = opcao(v('Tamanho do funcionário'), { calcado: 'calcado', calçado: 'calcado', camisa: 'camisa', luva: 'luva' } as Record<string, TipoTamanho>, 'Tamanho do funcionário');
       if (tipo) i.tipoTamanho = tipo;
       const min = numero(v('Estoque mínimo'));
       if (min !== undefined) { if (min < 0) throw new Error('Estoque mínimo não pode ser negativo'); i.minimo = min; }
-      const saldo = numero(v('Saldo inicial'));
+      const saldoTexto = texto(v('Saldo inicial'));
+      const porTamanho = saldoTexto && /[:=]/.test(saldoTexto) ? lerSaldoPorTamanho(saldoTexto) : undefined;
+      if (saldoTexto && /[:=]/.test(saldoTexto) && !porTamanho) throw new Error('Saldo por tamanho: escreva assim "38: 2; 39: 3; 40: 4"');
+      const saldo = porTamanho ? porTamanho.reduce((t, x) => t + x.quantidade, 0) : numero(v('Saldo inicial'));
+      if (porTamanho) {
+        if (porTamanho.some((x) => !(x.quantidade >= 0))) throw new Error('Saldo inicial não pode ser negativo');
+        i.saldoPorTamanho = porTamanho.filter((x) => x.quantidade > 0);
+        i.tamanhos = [...new Set([...(i.tamanhos ?? []).map(normalizarTamanho), ...porTamanho.map((x) => x.tamanho)])];
+      } else if (saldo && i.tamanhos?.length) {
+        throw new Error(`Item com tamanhos: informe o saldo de cada tamanho, ex.: "${i.tamanhos.slice(0, 3).map((t, n) => `${t}: ${n + 1}`).join('; ')}"`);
+      }
       if (saldo !== undefined && saldo !== 0) {
         if (saldo < 0) throw new Error('Saldo inicial não pode ser negativo');
         i.saldo = saldo;
@@ -124,7 +137,7 @@ export async function importarEpi(estoque: Estoque, dados: DadosEpi, data: strin
   const itens = new Map((await estoque.itens(true)).map((i) => [normalizar(i.nome), i]));
   const posicao = await estoque.posicao();
   const vistosItens = new Set<string>();
-  const entrada: { itemId: string; quantidade: number; custoUnitario: number }[] = [];
+  const entrada: { itemId: string; quantidade: number; custoUnitario: number; tamanho?: string }[] = [];
   let primeira = 0;
   for (const m of dados.itens) {
     try {
@@ -154,7 +167,8 @@ export async function importarEpi(estoque: Estoque, dados: DadosEpi, data: strin
       if (m.saldo) {
         const atual = posicao.itens[item.id]?.quantidade ?? 0;
         if (atual > 0) throw new Error(`${item.nome} já tem saldo no app (${atual} ${item.unidade}); para corrigir use o Inventário de EPI`);
-        entrada.push({ itemId: item.id, quantidade: m.saldo, custoUnitario: m.custo ?? 0 });
+        if (m.saldoPorTamanho?.length) for (const x of m.saldoPorTamanho) entrada.push({ itemId: item.id, quantidade: x.quantidade, custoUnitario: m.custo ?? 0, tamanho: x.tamanho });
+        else entrada.push({ itemId: item.id, quantidade: m.saldo, custoUnitario: m.custo ?? 0 });
         if (!primeira) primeira = m.linha;
       }
     } catch (e) { falha(ABAS_EPI.itens.nome, m.linha, e); }
@@ -162,7 +176,7 @@ export async function importarEpi(estoque: Estoque, dados: DadosEpi, data: strin
   if (entrada.length) {
     try {
       await estoque.lancar({ tipo: 'entrada', data, fornecedor: FORNECEDOR_SALDO_EPI, observacao: 'Importado da planilha de EPI', linhas: entrada });
-      resumo.itensComSaldo = entrada.length;
+      resumo.itensComSaldo = new Set(entrada.map((x) => x.itemId)).size;
     } catch (e) { falha(ABAS_EPI.itens.nome, primeira, e); }
   }
   return resumo;

@@ -3,6 +3,7 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import type { Estoque, Lancamento } from '../dados/estoque';
 import { adicionarDias, analisarDataBR, formatarDataBR } from '../domain/datas';
 import type { Posicao } from '../domain/estoque';
+import { controlaTamanho, normalizarTamanho, saldosPorTamanho, textoPorTamanho } from '../domain/epi';
 import { formatarMoeda, formatarQuantidade, lerNumero, paraUnidadeBase } from '../domain/formato';
 import type { Funcionario, Item, Local } from '../domain/tipos';
 import type { ServicoFotos } from '../fotos/servico';
@@ -42,6 +43,7 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
   const [locais, setLocais] = useState<Local[]>([]);
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [posicao, setPosicao] = useState<Posicao>();
+  const [porTamanho, setPorTamanho] = useState<Map<string, Map<string, number>>>(new Map());
   const [data, setData] = useState(formatarDataBR(hoje));
   const [nf, setNf] = useState('');
   const [fornecedor, setFornecedor] = useState('');
@@ -59,9 +61,10 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
   useEffect(() => {
     let ativo = true;
     (async () => {
-      const [i, l, f, p] = await Promise.all([estoque.itens(false, epi ? 'epi' : 'material'), estoque.locais(), estoque.funcionarios(false, epi ? 'epi' : 'galpao'), estoque.posicao()]);
+      const [i, l, f, p, m] = await Promise.all([estoque.itens(false, epi ? 'epi' : 'material'), estoque.locais(), estoque.funcionarios(false, epi ? 'epi' : 'galpao'), estoque.posicao(), estoque.movimentos()]);
       if (!ativo) return;
       setItens(i); setLocais(l); setFuncionarios(f); setPosicao(p);
+      if (epi) setPorTamanho(saldosPorTamanho(m, new Set(i.filter(controlaTamanho).map((x) => x.id))));
     })();
     return () => { ativo = false; };
   }, [estoque, versao, epi]);
@@ -109,6 +112,7 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
     if ((tipo === 'devolucao' || tipo === 'transferencia') && localId) {
       return `Na frente: ${formatarQuantidade(it, posicao?.locais[localId]?.[it.id]?.quantidade ?? 0)}`;
     }
+    if (controlaTamanho(it)) return `Saldo por tamanho: ${textoPorTamanho(it, porTamanho.get(it.id)) || 'nenhum'}`;
     return `${epi ? 'Saldo de EPI' : 'Saldo no galpão'}: ${formatarQuantidade(it, posicao?.itens[it.id]?.quantidade ?? 0)}`;
   }
 
@@ -133,6 +137,7 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
             return { ...linha, ca: ln.ca, tamanho: ln.tamanho, ...(ln.validade.trim() ? { validade: analisarDataBR(ln.validade) } : {}) };
           }
           if (tipo !== 'entrada') return linha;
+          if (controlaTamanho(it)) Object.assign(linha, { tamanho: ln.tamanho });
           const c = lerNumero(ln.custo);
           if (c !== undefined && c < 0) throw new Error(`Valor unitário inválido: ${it.nome}`);
           return c === undefined ? linha : { ...linha, custoUnitario: ln.emEmbalagem && it.embalagem ? c / it.embalagem.fator : c };
@@ -205,6 +210,19 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
                   value={ln.custo} onChangeText={(v) => mudar(ln.chave, { custo: v })} keyboardType="decimal-pad" style={{ flex: 1 }} />
               )}
             </View>
+            {tipo === 'entrada' && controlaTamanho(it) && (
+              <View style={{ gap: 6 }}>
+                <Text style={estilos.rotulo}>Tamanho (uma linha por tamanho; para outro tamanho, adicione o item de novo)</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {it.tamanhos!.map((t) => (
+                    <Pressable key={t} testID={`tam-${it.id}-${t}`} onPress={() => mudar(ln.chave, { tamanho: t })} style={[estilos.chip, ln.tamanho === t && estilos.chipAtivo]}>
+                      <Text style={[estilos.chipTexto, ln.tamanho === t && estilos.chipTextoAtivo]}>{t}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Campo testID={`tamanho-${it.id}`} rotulo="Ou digite um tamanho novo" value={ln.tamanho} onChangeText={(v) => mudar(ln.chave, { tamanho: v })} placeholder="Ex.: 41" />
+              </View>
+            )}
             {tipo === 'epi' && (
               <>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -215,7 +233,7 @@ export function LancamentoTela({ estoque, tipo, hoje, servicoFotos, versao = 0, 
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                     {it.tamanhos.map((t) => (
                       <Pressable key={t} testID={`tam-${it.id}-${t}`} onPress={() => mudar(ln.chave, { tamanho: t, tamanhoManual: true })} style={[estilos.chip, ln.tamanho === t && estilos.chipAtivo]}>
-                        <Text style={[estilos.chipTexto, ln.tamanho === t && estilos.chipTextoAtivo]}>{t}</Text>
+                        <Text style={[estilos.chipTexto, ln.tamanho === t && estilos.chipTextoAtivo]}>{controlaTamanho(it) ? `${t} (${porTamanho.get(it.id)?.get(normalizarTamanho(t)) ?? 0})` : t}</Text>
                       </Pressable>
                     ))}
                   </View>
