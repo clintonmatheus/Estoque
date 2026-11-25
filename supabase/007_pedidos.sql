@@ -34,8 +34,14 @@ drop policy if exists "alterar" on public.pedidos;
 create policy "leitura" on public.pedidos for select to authenticated using (
   public.papel_financeiro() in ('admin', 'pagador') or dados -> 'criado' ->> 'id' = auth.uid()::text
 );
+-- O app grava com "upsert" (INSERT ... ON CONFLICT DO UPDATE): o servidor confere a política de criação mesmo quando o
+-- registro já existe. Por isso, para pedido que já existe, quem pode alterar (pagador, administrador ou o dono) passa aqui
+-- e as regras de alteração (política "alterar" e o gatilho abaixo) decidem.
 create policy "criar" on public.pedidos for insert to authenticated with check (
-  public.tem_financeiro() and dados -> 'criado' ->> 'id' = auth.uid()::text
+  public.tem_financeiro() and (
+    dados -> 'criado' ->> 'id' = auth.uid()::text
+    or (public.papel_financeiro() in ('admin', 'pagador') and exists (select 1 from public.pedidos x where x.id = pedidos.id))
+  )
 );
 create policy "alterar" on public.pedidos for update to authenticated
   using (
@@ -53,6 +59,8 @@ language plpgsql security definer set search_path = public as $$
 declare novo text := new.dados ->> 'status'; antigo text; exigido text; criador uuid;
 begin
   criador := (new.dados -> 'criado' ->> 'id')::uuid;
+  -- Upsert de pedido que já existe chega aqui como INSERT; as regras de alteração rodam em seguida, no gatilho de UPDATE.
+  if tg_op = 'INSERT' and exists (select 1 from public.pedidos x where x.id = new.id) then return new; end if;
   if tg_op = 'INSERT' then
     if novo <> 'enviado' then raise exception 'Pedido novo precisa começar como enviado'; end if;
   else

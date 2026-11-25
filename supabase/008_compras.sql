@@ -21,10 +21,13 @@ drop policy if exists "alterar" on public.compras;
 create policy "leitura" on public.compras for select to authenticated using (
   public.papel_financeiro() in ('admin', 'pagador') or dados -> 'criado' ->> 'id' = auth.uid()::text
 );
+-- (upsert: compra que já existe passa aqui e as regras de alteração decidem; ver comentário da 007)
 create policy "criar" on public.compras for insert to authenticated with check (
-  (public.pode_lancar() or public.tem_financeiro())
-  and dados -> 'criado' ->> 'id' = auth.uid()::text
-  and dados ->> 'status' = 'aberta'
+  (public.pode_lancar() or public.tem_financeiro()) and (
+    (dados -> 'criado' ->> 'id' = auth.uid()::text and dados ->> 'status' = 'aberta')
+    or (exists (select 1 from public.compras x where x.id = compras.id)
+        and (public.papel_financeiro() in ('admin', 'pagador') or dados -> 'criado' ->> 'id' = auth.uid()::text))
+  )
 );
 create policy "alterar" on public.compras for update to authenticated
   using (
@@ -40,6 +43,7 @@ create policy "alterar" on public.compras for update to authenticated
 create or replace function public.proteger_compra() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
+  if tg_op = 'INSERT' and exists (select 1 from public.compras x where x.id = new.id) then return new; end if;  -- upsert: vale o gatilho de UPDATE
   if tg_op = 'INSERT' then
     if not exists (select 1 from public.fornecedores f where f.id = new.dados ->> 'fornecedorId' and f.dados ->> 'forma' = 'fatura') then
       raise exception 'A loja da compra precisa ser de fatura semanal';

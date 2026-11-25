@@ -6,7 +6,7 @@ import { cores, estilos } from './estilos';
 export function textoSync(e?: EstadoSync): string {
   if (!e) return 'Aguardando sincronização';
   if (e.sincronizando) return 'Sincronizando…';
-  if (e.erro) return 'Sem conexão — dados salvos no aparelho';
+  if (e.erro) return e.erro === 'Sem conexão' ? 'Sem conexão — dados salvos no aparelho' : `Servidor recusou uma alteração: ${e.erro}`;
   return e.ultimaEm ? `Sincronizado às ${horaLocal(e.ultimaEm)}` : 'Aguardando sincronização';
 }
 
