@@ -66,7 +66,7 @@ async function montar(): Promise<Estoque> {
     tipo: 'entrada', data: '2026-11-03', notaFiscal: '4521', fornecedor: 'Iquine Distribuidora',
     linhas: comPreco.map((i, k) => ({ itemId: i.id, quantidade: k % 7 === 0 ? 2 : 6 + (k % 5) * 3, custoUnitario: i.custoReferencia! })),
   });
-  await e.lancar({ tipo: 'entrada', data: '2026-04-01', notaFiscal: '889', fornecedor: 'Casa do EPI', linhas: [{ itemId: bota.id, quantidade: 6, custoUnitario: 89.9 }, { itemId: luva.id, quantidade: 20, custoUnitario: 18.5 }] });
+  await e.lancar({ tipo: 'entrada', data: '2026-04-01', notaFiscal: '889', fornecedor: 'Casa do EPI', linhas: [{ itemId: bota.id, quantidade: 2, custoUnitario: 89.9, tamanho: '39' }, { itemId: bota.id, quantidade: 3, custoUnitario: 89.9, tamanho: '41' }, { itemId: bota.id, quantidade: 1, custoUnitario: 89.9, tamanho: '42' }, { itemId: luva.id, quantidade: 20, custoUnitario: 18.5 }] });
   for (const [k, i] of comPreco.entries()) if (k % 7 === 0) await e.salvarItem({ ...i, estoqueMinimo: 5 });
   const tinta = comPreco[1];
   await e.lancar({ tipo: 'saida', data: '2026-11-10', localId: riach.id, funcionarioId: joao.id, linhas: [{ itemId: tinta.id, quantidade: 3 }, { itemId: comPreco[4].id, quantidade: 2 }] });
