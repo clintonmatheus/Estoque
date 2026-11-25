@@ -27,6 +27,8 @@ saídas para as frentes de serviço, devoluções, transferências, inventário 
 
 **Atualização (Financeiro, etapa 1):** rode `supabase/006_financeiro_cadastros.sql` e depois `supabase/006b_perfis_financeiro.sql` (troque os e-mails).
 
+**Atualização (backup e auditoria):** rode `supabase/013_auditoria_seguranca.sql` e cadastre os segredos `SUPABASE_SERVICE_KEY` e `BACKUP_SENHA` no GitHub (veja "Backup e segurança").
+
 **Atualização (saldos para solicitantes):** rode `supabase/011_saldos_e_login.sql` (troque o e-mail do Augusto; também remove o login construtorapassosrn@gmail.com) e depois `supabase/012_saldos_ferramentas.sql`.
 
 **Atualização (três pilares e perfis):** rode `supabase/010_pilares.sql` e depois `supabase/010b_perfis_pilares.sql` (troque os e-mails do Daniel e do Augusto). Gere o APK novo e publique a versão web.
@@ -108,3 +110,10 @@ As mesmas regras valem no servidor (RLS): o controle só grava itens/lançamento
 
 ## EPI por tamanho
 Item de EPI com "tamanhos disponíveis" tem o saldo separado por tamanho: a compra, a entrega e o inventário pedem o tamanho, e nenhum tamanho pode ficar negativo. Na planilha de itens de EPI, o saldo inicial de um item com tamanhos é escrito assim: `38: 2; 39: 3; 40: 4`. Saldo antigo, lançado antes do controle por tamanho, aparece como "sem tamanho" e é zerado no primeiro inventário de EPI contado por tamanho.
+
+## Backup e segurança
+- **Cópia diária** (`.github/workflows/backup.yml`): às 03:17 copia tabelas, perfis, logins (sem senhas) e arquivos anexados, criptografa (AES-256, senha `BACKUP_SENHA`) e guarda como artefato por 90 dias. O acesso diário também mantém o projeto gratuito do Supabase ativo. Rodar na hora: Actions → Cópia diária dos dados → Run workflow.
+- **Abrir uma cópia**: baixe o artefato, depois `node scripts/backup/abrir.mjs estoque-backup-AAAA-MM-DD.tar.gz.enc` (ou `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in … -out ….tar.gz`) e descompacte.
+- **Restaurar**: `node scripts/backup/restaurar.mjs sql <pasta> [tabelas…] > restaurar.sql` e rode no SQL Editor (grava por cima pelo id, não apaga nada); arquivos: `SUPABASE_URL=… SUPABASE_SERVICE_KEY=… node scripts/backup/restaurar.mjs arquivos <pasta>`.
+- **Auditoria** (`013`): toda criação, alteração ou exclusão guarda antes/depois, autor e hora na tabela `auditoria`, que o app não lê nem altera; consultas prontas no fim do SQL.
+- A chave secreta do Supabase fica só nos segredos do GitHub; o app usa a chave pública, e as permissões ficam no servidor (RLS).

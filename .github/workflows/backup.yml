@@ -1,0 +1,66 @@
+name: Cópia diária dos dados (backup)
+
+# Todo dia às 03:17 (Brasília): acessa o Supabase (o que também mantém o projeto gratuito ativo),
+# copia tabelas, perfis, logins e arquivos anexados, criptografa com senha e guarda por 90 dias.
+# Segredos necessários (Settings → Secrets and variables → Actions → New repository secret):
+#   SUPABASE_SERVICE_KEY  chave secreta do Supabase (Project Settings → API Keys → Secret keys)
+#   BACKUP_SENHA          senha para abrir as cópias (guarde-a fora do GitHub)
+# O repositório é público: a cópia só sai daqui criptografada e o log mostra apenas contagens.
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write   # para manter esta tarefa ativa (o GitHub desliga agendamentos após 60 dias sem atividade)
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: https://fihaqorqabpaoebbwdoh.supabase.co
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      BACKUP_SENHA: ${{ secrets.BACKUP_SENHA }}
+    steps:
+      - name: Conferir segredos
+        run: |
+          if [ -z "$SUPABASE_SERVICE_KEY" ] || [ -z "$BACKUP_SENHA" ]; then
+            echo "::error::Cadastre os segredos SUPABASE_SERVICE_KEY e BACKUP_SENHA (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          if [ ${#BACKUP_SENHA} -lt 12 ]; then echo "::error::BACKUP_SENHA precisa de pelo menos 12 caracteres."; exit 1; fi
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Instalar só o cliente do Supabase
+        run: cd scripts/backup && npm init -y >/dev/null && npm install --no-audit --no-fund @supabase/supabase-js@2 >/dev/null
+      - name: Testar o script de cópia
+        run: node --test scripts/backup/backup.test.mjs
+      - name: Copiar os dados
+        run: node scripts/backup/backup.mjs backup
+      - name: Compactar e criptografar
+        run: |
+          DATA=$(TZ=America/Sao_Paulo date +%Y-%m-%d)
+          echo "DATA=$DATA" >> "$GITHUB_ENV"
+          tar czf estoque.tar.gz backup
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in estoque.tar.gz -out "estoque-backup-$DATA.tar.gz.enc" -pass env:BACKUP_SENHA
+          rm -rf backup estoque.tar.gz
+          ls -lh "estoque-backup-$DATA.tar.gz.enc"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: estoque-backup-${{ env.DATA }}
+          path: estoque-backup-*.tar.gz.enc
+          retention-days: 90
+          if-no-files-found: error
+      - name: Manter o agendamento ativo
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/backup.yml/enable" || true

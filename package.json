@@ -44,7 +44,8 @@
     "web": "expo start --web",
     "test": "jest",
     "test:watch": "jest --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:backup": "node --test scripts/backup/backup.test.mjs"
   },
   "private": true,
   "jest": {
