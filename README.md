@@ -27,6 +27,8 @@ saídas para as frentes de serviço, devoluções, transferências, inventário 
 
 **Atualização (Financeiro, etapa 1):** rode `supabase/006_financeiro_cadastros.sql` e depois `supabase/006b_perfis_financeiro.sql` (troque os e-mails).
 
+**Atualização (terceirizados):** rode `supabase/014_terceirizados.sql` (depois da 013). Use `supabase/000_verificar.sql` para ver quais scripts já foram aplicados.
+
 **Atualização (backup e auditoria):** rode `supabase/013_auditoria_seguranca.sql` e cadastre os segredos `SUPABASE_SERVICE_KEY` e `BACKUP_SENHA` no GitHub (veja "Backup e segurança").
 
 **Atualização (saldos para solicitantes):** rode `supabase/011_saldos_e_login.sql` (troque o e-mail do Augusto; também remove o login construtorapassosrn@gmail.com) e depois `supabase/012_saldos_ferramentas.sql`.
@@ -117,3 +119,7 @@ Item de EPI com "tamanhos disponíveis" tem o saldo separado por tamanho: a comp
 - **Restaurar**: `node scripts/backup/restaurar.mjs sql <pasta> [tabelas…] > restaurar.sql` e rode no SQL Editor (grava por cima pelo id, não apaga nada); arquivos: `SUPABASE_URL=… SUPABASE_SERVICE_KEY=… node scripts/backup/restaurar.mjs arquivos <pasta>`.
 - **Auditoria** (`013`): toda criação, alteração ou exclusão guarda antes/depois, autor e hora na tabela `auditoria`, que o app não lê nem altera; consultas prontas no fim do SQL.
 - A chave secreta do Supabase fica só nos segredos do GitHub; o app usa a chave pública, e as permissões ficam no servidor (RLS).
+
+## Pagamento a terceirizado e filtros de pagamentos
+- **Terceirizado** (só pagador e administradores abrem): ao criar o pedido, ligue *Pagamento a terceirizado*. O pagamento segue o fluxo normal (um centro de custo e frente por pedido). Depois de pago, o pedido aparece em *Notas pendentes*, com o que falta e os dias desde o pagamento; ali se **lança cada nota** (número, valor, emissão e arquivo; o XML preenche sozinho). Quando as notas somam o valor pago, o acompanhamento **fecha sozinho**; se não fecharem (retenções, por exemplo), *Encerrar com justificativa*. Remover uma nota reabre o que tinha fechado sozinho.
+- **Pagamentos → Todos** (para quem confere, paga ou administra): filtros por **empresa**, **banco/conta**, **quem pagou** e **período** (data do pagamento), com o total dos pagamentos filtrados.

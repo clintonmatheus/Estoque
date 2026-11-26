@@ -59,3 +59,39 @@ export function possiveisDuplicados(novo: Pick<Pedido, 'id' | 'valor' | 'vencime
 }
 
 export const ultimoEvento = (p: Pedido): EventoPedido | undefined => p.historico[p.historico.length - 1];
+
+const centavos = (v: number) => Math.round(v * 100);
+
+/** Situação das notas de um pagamento a terceirizado. `falta` negativo = as notas passaram do valor pago. */
+export interface ResumoNotas { pago: number; soma: number; falta: number; dias: number; pendente: boolean; encerrada: boolean }
+
+/** Nada para pedido que não é de terceirizado ou ainda não foi pago. `pendente`: pago, notas ainda não fecharam o valor e ninguém encerrou. */
+export function resumoNotas(p: Pedido, hoje: string): ResumoNotas | undefined {
+  if (!p.terceirizado || p.status !== 'pago' || !p.pagamento) return undefined;
+  const pago = p.pagamento.valor;
+  const soma = p.terceirizado.notas.reduce((t, n) => t + centavos(n.valor), 0) / 100;
+  const dias = Math.max(0, Math.round((Date.parse(hoje) - Date.parse(p.pagamento.data)) / 86_400_000));
+  const encerrada = !!p.terceirizado.encerrada;
+  return { pago, soma, falta: (centavos(pago) - centavos(soma)) / 100, dias, pendente: !encerrada, encerrada };
+}
+
+export const notasPendentes = (p: Pedido, hoje: string) => resumoNotas(p, hoje)?.pendente === true;
+
+export interface FiltroPagos { empresaId?: string; contaId?: string; pagadorId?: string; de?: string; ate?: string }
+export const filtroAtivo = (f: FiltroPagos) => !!(f.empresaId || f.contaId || f.pagadorId || f.de || f.ate);
+
+/** Quem registrou o pagamento (última ação "pagou" do histórico). */
+export const quemPagou = (p: Pedido) => [...p.historico].reverse().find((h) => h.acao === 'pagou')?.por;
+
+/** Com algum filtro ativo, só entram pedidos pagos que combinam com todos (datas = data do pagamento, inclusive). */
+export function passaNoFiltro(p: Pedido, f: FiltroPagos): boolean {
+  if (!filtroAtivo(f)) return true;
+  const g = p.pagamento;
+  if (p.status !== 'pago' || !g) return false;
+  if (f.empresaId && g.empresaId !== f.empresaId) return false;
+  if (f.contaId && g.contaId !== f.contaId) return false;
+  if (f.pagadorId && quemPagou(p)?.id !== f.pagadorId) return false;
+  if (f.de && g.data < f.de) return false;
+  if (f.ate && g.data > f.ate) return false;
+  return true;
+}

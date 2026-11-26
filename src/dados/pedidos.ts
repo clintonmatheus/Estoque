@@ -3,7 +3,7 @@ import { lerBoleto } from '../domain/boleto';
 import { lerChavePix } from '../domain/nomes';
 import { aprovadorExigido, ehAberto, podeAprovar, podeConferirOuPagar, podeEditar, possiveisDuplicados } from '../domain/pedidos';
 import {
-  ehAdminFinanceiro, NOME_STATUS_PEDIDO, podePagar, temFinanceiro, type AcaoPedido, type Anexo, type Autoria, type Compra, type Pedido, type PagamentoPedido, type StatusPedido, type TipoPedido, type Usuario,
+  ehAdminFinanceiro, NOME_STATUS_PEDIDO, podePagar, temFinanceiro, type AcaoPedido, type Anexo, type Autoria, type Compra, type NotaTerceiro, type Pedido, type PagamentoPedido, type StatusPedido, type TipoPedido, type Usuario,
 } from '../domain/tipos';
 import type { Armazenamento, Tabela } from '../storage/contrato';
 import type { OpcoesEstoque } from './estoque';
@@ -30,10 +30,14 @@ export interface NovoPedido {
   reembolsoDe?: string;
   /** Fatura semanal: ids das compras que este pedido paga (sem centro de custo próprio: cada compra tem o seu). */
   fatura?: { compras: string[]; justificativa?: string };
+  /** Pagamento a terceirizado: as notas fiscais chegam depois do pagamento (só pagador e administrador abrem). */
+  terceirizado?: boolean;
 }
 
 /** O que a conferência pode corrigir (a classificação); valor e tipo voltam ao solicitante pela devolução. */
 export interface AjustesConferencia { centroId?: string; frenteId?: string | null; tipoDespesaId?: string; fornecedorId?: string; descricao?: string }
+
+export interface NovaNota { numero: string; valor: number; emissao?: string; arquivo?: { uri: string; formato: NonNullable<Anexo['formato']>; nome?: string } }
 
 export interface DadosPagamento { data: string; empresaId: string; contaId: string; valor: number; observacao?: string }
 
@@ -118,6 +122,11 @@ export class Pedidos {
     this.exigirFinanceiro();
     const atual = n.id ? await this.a.pedidos.obter(n.id) : undefined;
     if (atual && !podeEditar(this.usuario, atual)) throw new Error('Este pedido já foi conferido ou não é seu: não dá para editar');
+    if (n.terceirizado) {
+      if (!podeConferirOuPagar(this.usuario)) throw new Error('Sem permissão: só o pagador ou o administrador abre pagamento a terceirizado');
+      if (n.fatura) throw new Error('Pagamento a terceirizado não é fatura de loja');
+      if (n.tipo === 'reembolso') throw new Error('Pagamento a terceirizado é por Pix ou boleto');
+    }
     const id = n.id ?? this.o.novoId();
     const fatura = n.fatura ? await this.resolverFatura(n, id) : undefined;
     if (fatura) { const { centroId: _c, frenteId: _f, tipoDespesaId: _t, ...resto } = n; n = resto; }
@@ -130,6 +139,7 @@ export class Pedidos {
       ...(n.urgente ? { urgente: true } : {}), ...(n.nota && Object.keys(n.nota).length ? { nota: n.nota } : {}),
       ...(texto(n.reembolsoDe) ? { reembolsoDe: texto(n.reembolsoDe) } : {}),
       ...(fatura ? { fatura: fatura.dados } : {}),
+      ...(n.terceirizado ? { terceirizado: { notas: atual?.terceirizado?.notas ?? [] } } : {}),
       aprovador: aprovadorExigido({ tipo: n.tipo, valor: n.valor }, this.abriuPagador),
     };
     const outros = await this.a.pedidos.listar();
@@ -295,6 +305,68 @@ export class Pedidos {
     if (d.data > this.hoje()) throw new Error('A data do pagamento não pode ser futura');
     const pagamento: PagamentoPedido = { data: d.data, empresaId: d.empresaId, contaId: d.contaId, valor: d.valor, ...(obs ? { observacao: obs } : {}) };
     return this.mudar(p, 'pago', [{ acao: 'pagou', nota: obs }], { pagamento });
+  }
+
+  // ---------- Terceirizado: notas fiscais que chegam depois do pagamento ----------
+  private exigirTerceirizadoPago(p: Pedido) {
+    this.exigirPagadorOuAdmin();
+    if (!p.terceirizado) throw new Error('Este pedido não é de terceirizado');
+    if (p.status !== 'pago') throw new Error('As notas são lançadas depois que o pagamento é registrado');
+  }
+
+  /** Fecha sozinho quando as notas somam o valor pago; reabre se uma nota sai e a soma deixa de bater (encerramento justificado não reabre). */
+  private ajustarEncerramento(p: Pedido, notas: NotaTerceiro[]): { terceirizado: Pedido['terceirizado']; fechou: boolean; reabriu: boolean } {
+    const soma = Math.round(notas.reduce((t, n) => t + n.valor, 0) * 100);
+    const pago = Math.round((p.pagamento?.valor ?? 0) * 100);
+    const atual = p.terceirizado!.encerrada;
+    if (soma === pago && !atual) return { terceirizado: { notas, encerrada: { por: this.autoria() } }, fechou: true, reabriu: false };
+    if (soma !== pago && atual && !atual.justificativa) return { terceirizado: { notas }, fechou: false, reabriu: true };
+    return { terceirizado: { notas, ...(atual ? { encerrada: atual } : {}) }, fechou: false, reabriu: false };
+  }
+
+  /** Lança uma nota recebida (com o arquivo, se houver). Quando as notas somam o valor pago, o pedido é encerrado sozinho. */
+  async lancarNota(pedidoId: string, n: NovaNota): Promise<Pedido> {
+    const p = await this.carregar(pedidoId);
+    this.exigirTerceirizadoPago(p);
+    if (p.terceirizado!.encerrada) throw new Error('As notas deste pagamento já foram encerradas');
+    const numero = texto(n.numero);
+    if (!numero) throw new Error('Informe o número da nota');
+    if (!(n.valor > 0) || !Number.isFinite(n.valor)) throw new Error('Informe o valor da nota');
+    if (p.terceirizado!.notas.some((x) => x.numero.toLowerCase() === numero.toLowerCase())) throw new Error(`A nota ${numero} já foi lançada neste pagamento`);
+    const outro = (await this.a.pedidos.listar()).find((x) => x.id !== p.id && x.terceirizado?.notas.some((y) => y.numero.toLowerCase() === numero.toLowerCase() && y.valor === n.valor && x.favorecido === p.favorecido));
+    if (outro) throw new Error(`A nota ${numero} deste favorecido já foi lançada no pedido ${outro.codigo}`);
+    const id = this.o.novoId();
+    let anexoId: string | undefined;
+    if (n.arquivo) {
+      const x = await this.gravar<Anexo>('anexos', { id: this.o.novoId(), grupo: p.id, uri: n.arquivo.uri, formato: n.arquivo.formato, nome: n.arquivo.nome ?? `NF ${numero}`, criado: this.autoria() });
+      anexoId = x.id;
+    }
+    const nota: NotaTerceiro = { id, numero, valor: Math.round(n.valor * 100) / 100, ...(n.emissao ? { emissao: n.emissao } : {}), ...(anexoId ? { anexoId } : {}), criado: this.autoria() };
+    const r = this.ajustarEncerramento(p, [...p.terceirizado!.notas, nota]);
+    const eventos: { acao: AcaoPedido; nota?: string }[] = [{ acao: 'lancou_nota', nota: `NF ${numero}` }];
+    if (r.fechou) eventos.push({ acao: 'encerrou_notas', nota: 'notas somam o valor pago' });
+    return this.mudar(p, p.status, eventos, { terceirizado: r.terceirizado });
+  }
+
+  /** Remove uma nota lançada por engano (e o arquivo dela). Se o pedido tinha fechado sozinho, volta a ficar pendente. */
+  async removerNota(pedidoId: string, notaId: string): Promise<Pedido> {
+    const p = await this.carregar(pedidoId);
+    this.exigirTerceirizadoPago(p);
+    const nota = p.terceirizado!.notas.find((x) => x.id === notaId);
+    if (!nota) throw new Error('Nota não encontrada');
+    if (nota.anexoId) { const x = await this.a.anexos.obter(nota.anexoId); if (x) await this.gravar('anexos', { ...x, excluido: true }); }
+    const r = this.ajustarEncerramento(p, p.terceirizado!.notas.filter((x) => x.id !== notaId));
+    return this.mudar(p, p.status, [{ acao: 'removeu_nota', nota: `NF ${nota.numero}` }], { terceirizado: r.terceirizado });
+  }
+
+  /** Encerra o acompanhamento quando as notas não fecham o valor pago; exige explicar a diferença. */
+  async encerrarNotas(pedidoId: string, justificativa: string): Promise<Pedido> {
+    const p = await this.carregar(pedidoId);
+    this.exigirTerceirizadoPago(p);
+    if (p.terceirizado!.encerrada) throw new Error('As notas deste pagamento já foram encerradas');
+    const j = texto(justificativa);
+    if (!j) throw new Error('Explique a diferença entre as notas e o valor pago');
+    return this.mudar(p, p.status, [{ acao: 'encerrou_notas', nota: j }], { terceirizado: { notas: p.terceirizado!.notas, encerrada: { por: this.autoria(), justificativa: j } } });
   }
 
   // ---------- Arquivos do pedido ----------

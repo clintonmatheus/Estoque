@@ -358,7 +358,7 @@ export type TipoPedido = 'pix' | 'boleto' | 'reembolso';
  */
 export type StatusPedido = 'enviado' | 'aprovacao' | 'pronto' | 'pago' | 'devolvido' | 'rejeitado' | 'cancelado';
 
-export type AcaoPedido = 'enviou' | 'reenviou' | 'editou' | 'conferiu' | 'aprovou' | 'devolveu' | 'rejeitou' | 'cancelou' | 'pagou';
+export type AcaoPedido = 'enviou' | 'reenviou' | 'editou' | 'conferiu' | 'aprovou' | 'devolveu' | 'rejeitou' | 'cancelou' | 'pagou' | 'lancou_nota' | 'removeu_nota' | 'encerrou_notas';
 /** Quem precisa aprovar o pedido (definido pelo valor, pelo tipo e por quem abriu). */
 export type Aprovador = 'nenhum' | 'pagador' | 'admin';
 export interface EventoPedido { acao: AcaoPedido; por: Autoria; nota?: string }
@@ -380,6 +380,23 @@ export interface PagamentoPedido {
   /** Diferença em relação ao pedido (juros, multa ou desconto) explicada aqui. */
   observacao?: string;
 }
+
+/** Nota fiscal que o terceirizado enviou depois de receber. */
+export interface NotaTerceiro {
+  id: string;
+  numero: string;
+  valor: number;
+  emissao?: string;
+  /** Arquivo da nota (XML, PDF ou foto), guardado nos anexos do pedido. */
+  anexoId?: string;
+  criado: Autoria;
+}
+
+/**
+ * Pagamento a terceirizado: o pagamento sai primeiro e, nos dias seguintes, ele envia as notas, que somadas chegam ao valor pago.
+ * `encerrada`: as notas fecharam o valor (sem justificativa) ou alguém encerrou explicando a diferença.
+ */
+export interface TerceirizadoPedido { notas: NotaTerceiro[]; encerrada?: { por: Autoria; justificativa?: string } }
 
 /** Fatura de loja: um pagamento só, que reúne várias compras (cada uma com seu centro e frente). Soma delas e explicação da diferença. */
 export interface FaturaPedido { compras: string[]; soma: number; justificativa?: string }
@@ -412,6 +429,8 @@ export interface Pedido {
   reembolsoDe?: string;
   /** Fatura semanal de loja: as compras que o pedido paga. Não tem centro de custo próprio: o custo fica nas compras. */
   fatura?: FaturaPedido;
+  /** Pagamento a terceirizado: as notas fiscais chegam depois e somam o valor pago. */
+  terceirizado?: TerceirizadoPedido;
   pagamento?: PagamentoPedido;
   historico: EventoPedido[];
   criado: Autoria;

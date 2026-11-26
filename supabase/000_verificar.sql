@@ -17,7 +17,8 @@ from (values
   ('010b_perfis_pilares',    exists (select 1 from public.perfis where paga) and exists (select 1 from public.perfis where papel = 'consultor' and financeiro = 'admin'), 'perfis com paga e administradores definidos'),
   ('011_saldos_e_login',     (select pg_get_constraintdef(oid) ilike '%saldos%' from pg_constraint where conname = 'perfis_papel_check' and conrelid = 'public.perfis'::regclass) and not exists (select 1 from auth.users where lower(email) = 'construtorapassosrn@gmail.com'), 'papel saldos aceito e login antigo removido'),
   ('012_saldos_ferramentas', to_regprocedure('public.ve_ferramentas()') is not null, 'função ve_ferramentas'),
-  ('013_auditoria_seguranca', to_regclass('public.auditoria') is not null and exists (select 1 from pg_trigger where tgname = 'auditar'), 'tabela auditoria e gatilhos de auditoria')
+  ('013_auditoria_seguranca', to_regclass('public.auditoria') is not null and exists (select 1 from pg_trigger where tgname = 'auditar'), 'tabela auditoria e gatilhos de auditoria'),
+  ('014_terceirizados',      exists (select 1 from pg_trigger where tgname = 'proteger_terceirizado'), 'gatilho de proteção do pagamento a terceirizado')
 ) as v (script, ok, o_que_confere)
 order by script;
 

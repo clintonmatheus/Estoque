@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import type { Financeiro } from '../dados/financeiro';
-import type { DadosPagamento, NovoPedido } from '../dados/pedidos';
+import type { DadosPagamento, NovaNota, NovoPedido } from '../dados/pedidos';
 import { analisarDataBR, formatarDataBR } from '../domain/datas';
 import { formatarMoeda, lerNumero } from '../domain/formato';
 import { lerNotaXml } from '../domain/nota';
 import { soNumeros } from '../domain/nomes';
-import { ordemDePagamento, podeAprovar, podeConferirOuPagar, podeEditar, prazoDoPedido, type Prazo } from '../domain/pedidos';
+import { filtroAtivo, notasPendentes, ordemDePagamento, passaNoFiltro, podeAprovar, podeConferirOuPagar, podeEditar, prazoDoPedido, quemPagou, resumoNotas, type FiltroPagos, type Prazo } from '../domain/pedidos';
 import {
   ehAdminFinanceiro, NOME_STATUS_PEDIDO, podePagar, NOME_TIPO_PEDIDO, type Anexo, type CentroCusto, type Compra, type ContaBancaria, type Empresa, type Fornecedor, type Local, type Pedido, type TipoDespesa, type TipoPedido,
 } from '../domain/tipos';
@@ -15,14 +15,14 @@ import { Botao, Campo, Cartao, Chips, Mensagem, Seletor } from './componentes';
 import { EntradaBoleto } from './EntradaBoleto';
 import { cores, estilos } from './estilos';
 
-type Filtro = 'conferir' | 'aprovar' | 'pagar' | 'todos' | 'abertos';
+type Filtro = 'conferir' | 'aprovar' | 'pagar' | 'notas' | 'todos' | 'abertos';
 
 interface Cadastros { empresas: Empresa[]; contas: ContaBancaria[]; centros: CentroCusto[]; frentes: Local[]; fornecedores: Fornecedor[]; tipos: TipoDespesa[] }
 const VAZIO: Cadastros = { empresas: [], contas: [], centros: [], frentes: [], fornecedores: [], tipos: [] };
 
 const NOME_PRAZO: Record<Prazo, string> = { vencido: 'Vencido', hoje: 'Vence hoje', amanha: 'Vence amanhã', semana: 'Vence nesta semana', depois: '', sem: '' };
 const COR_STATUS: Record<Pedido['status'], string> = { enviado: cores.aviso, aprovacao: cores.aviso, pronto: cores.primaria, pago: cores.ok, devolvido: cores.erro, rejeitado: cores.erro, cancelado: cores.suave };
-const NOME_ACAO: Record<string, string> = { enviou: 'enviou', reenviou: 'reenviou', editou: 'editou', conferiu: 'conferiu', aprovou: 'aprovou', devolveu: 'devolveu', rejeitou: 'rejeitou', cancelou: 'cancelou', pagou: 'pagou' };
+const NOME_ACAO: Record<string, string> = { enviou: 'enviou', reenviou: 'reenviou', editou: 'editou', conferiu: 'conferiu', aprovou: 'aprovou', devolveu: 'devolveu', rejeitou: 'rejeitou', cancelou: 'cancelou', pagou: 'pagou', lancou_nota: 'lançou', removeu_nota: 'removeu', encerrou_notas: 'encerrou as notas' };
 const reais = (v: number) => formatarMoeda(v);
 const dataBR = (d?: string) => { try { return d ? formatarDataBR(d) : ''; } catch { return d ?? ''; } };
 const msgErro = (e: unknown) => (e instanceof Error ? e.message : 'Algo deu errado');
@@ -38,6 +38,11 @@ export function PedidosTela({ financeiro, servicoFotos, hoje, versao = 0, onAlte
   const [cad, setCad] = useState<Cadastros>(VAZIO);
   const [tela, setTela] = useState<{ t: 'lista' } | { t: 'novo'; editar?: Pedido } | { t: 'ver'; id: string }>({ t: 'lista' });
   const [recarregar, setRecarregar] = useState(0);
+  const [fEmpresa, setFEmpresa] = useState<string>();
+  const [fConta, setFConta] = useState<string>();
+  const [fPagador, setFPagador] = useState<string>();
+  const [fDe, setFDe] = useState('');
+  const [fAte, setFAte] = useState('');
   const [msg, setMsg] = useState<{ ok?: string; erro?: string }>({});
 
   useEffect(() => {
@@ -68,23 +73,58 @@ export function PedidosTela({ financeiro, servicoFotos, hoje, versao = 0, onAlte
     conferir: pedidos.filter((p) => p.status === 'enviado').length,
     aprovar: pedidos.filter((p) => p.status === 'aprovacao').length,
     pagar: pedidos.filter((p) => p.status === 'pronto').length,
+    notas: pedidos.filter((p) => notasPendentes(p, hoje)).length,
   };
+  const dataFiltro = (t: string) => { try { return t.trim() ? analisarDataBR(t) : undefined; } catch { return undefined; } };
+  const periodoInvalido = (t: string) => !!t.trim() && !dataFiltro(t);
+  const filtroPagos: FiltroPagos = {
+    ...(fEmpresa ? { empresaId: fEmpresa } : {}), ...(fConta ? { contaId: fConta } : {}), ...(fPagador ? { pagadorId: fPagador } : {}),
+    ...(dataFiltro(fDe) ? { de: dataFiltro(fDe) } : {}), ...(dataFiltro(fAte) ? { ate: dataFiltro(fAte) } : {}),
+  };
+  const comFiltro = gestor && filtro === 'todos' && filtroAtivo(filtroPagos);
   const visiveis = pedidos.filter((p) => {
     if (filtro === 'conferir') return p.status === 'enviado';
     if (filtro === 'aprovar') return p.status === 'aprovacao';
     if (filtro === 'pagar') return p.status === 'pronto';
+    if (filtro === 'notas') return notasPendentes(p, hoje);
     if (filtro === 'abertos') return ['enviado', 'aprovacao', 'pronto', 'devolvido'].includes(p.status);
-    return true;
+    return !comFiltro || passaNoFiltro(p, filtroPagos);
   }).sort(filtro === 'pagar' ? ordemDePagamento : (a, b) => b.criado.em.localeCompare(a.criado.em));
   const opcoes: { id: Filtro; titulo: string }[] = gestor
-    ? [{ id: 'conferir', titulo: `A conferir (${cont.conferir})` }, { id: 'aprovar', titulo: `A aprovar (${cont.aprovar})` }, { id: 'pagar', titulo: `A pagar (${cont.pagar})` }, { id: 'todos', titulo: 'Todos' }]
+    ? [{ id: 'conferir', titulo: `A conferir (${cont.conferir})` }, { id: 'aprovar', titulo: `A aprovar (${cont.aprovar})` }, { id: 'pagar', titulo: `A pagar (${cont.pagar})` }, ...(cont.notas ? [{ id: 'notas' as Filtro, titulo: `Notas pendentes (${cont.notas})` }] : []), { id: 'todos', titulo: 'Todos' }]
     : [{ id: 'abertos', titulo: 'Em andamento' }, { id: 'todos', titulo: 'Todos' }];
+
+  const pagadores = [...new Map(pedidos.map((p) => quemPagou(p)).filter((x): x is NonNullable<typeof x> => !!x).map((x) => [x.id, x.nome])).entries()].map(([id, nome]) => ({ id, titulo: nome }));
+  const TODOS = '__todos';
+  const opcoesCom = (lista: { id: string; titulo: string; subtitulo?: string }[], rotulo: string) => [{ id: TODOS, titulo: rotulo }, ...lista];
+  const totalFiltrado = Math.round(visiveis.reduce((t, p) => t + (p.pagamento?.valor ?? 0), 0) * 100) / 100;
 
   return (
     <ScrollView contentContainerStyle={estilos.conteudo} keyboardShouldPersistTaps="handled">
       <Botao testID="novo-pedido" titulo="+ Novo pedido de pagamento" onPress={() => { setMsg({}); setTela({ t: 'novo' }); }} />
       <Mensagem {...msg} />
       <Chips prefixo="pedidos" valor={filtro} onMudar={setFiltro} opcoes={opcoes} />
+      {gestor && filtro === 'todos' && (
+        <Cartao>
+          <Text style={estilos.secao}>Filtrar pagamentos feitos</Text>
+          <Seletor testID="filtro-empresa" rotulo="Empresa que pagou" valor={fEmpresa} vazio="Todas" opcoes={opcoesCom(cad.empresas.map((e) => ({ id: e.id, titulo: e.apelido, subtitulo: e.nome })), 'Todas')}
+            onEscolher={(id) => { setFEmpresa(id === TODOS ? undefined : id); setFConta(undefined); }} />
+          <Seletor testID="filtro-banco" rotulo="Banco / conta" valor={fConta} vazio="Todos" opcoes={opcoesCom(cad.contas.filter((c) => !fEmpresa || c.empresaId === fEmpresa).map((c) => ({ id: c.id, titulo: c.apelido, subtitulo: c.banco })), 'Todos')}
+            onEscolher={(id) => setFConta(id === TODOS ? undefined : id)} />
+          <Seletor testID="filtro-pagador" rotulo="Quem pagou" valor={fPagador} vazio="Todos" opcoes={opcoesCom(pagadores, 'Todos')} onEscolher={(id) => setFPagador(id === TODOS ? undefined : id)} />
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <View style={{ flex: 1 }}><Campo testID="filtro-de" rotulo="Pago de" placeholder="dd/mm/aaaa" value={fDe} onChangeText={setFDe} /></View>
+            <View style={{ flex: 1 }}><Campo testID="filtro-ate" rotulo="até" placeholder="dd/mm/aaaa" value={fAte} onChangeText={setFAte} /></View>
+          </View>
+          {(periodoInvalido(fDe) || periodoInvalido(fAte)) && <Text style={estilos.erro}>Data inválida (use dia/mês/ano)</Text>}
+          {comFiltro && (
+            <>
+              <Text testID="filtro-total" style={estilos.titulo}>{visiveis.length} pagamento(s) · {reais(totalFiltrado)}</Text>
+              <Botao testID="limpar-filtros" secundario titulo="Limpar filtros" onPress={() => { setFEmpresa(undefined); setFConta(undefined); setFPagador(undefined); setFDe(''); setFAte(''); }} />
+            </>
+          )}
+        </Cartao>
+      )}
       {visiveis.length === 0 && <Text style={estilos.subtitulo}>Nenhum pedido aqui.</Text>}
       {visiveis.map((p) => {
         const prazo = p.status === 'pronto' || p.status === 'enviado' || p.status === 'aprovacao' ? prazoDoPedido(p, hoje) : 'sem';
@@ -96,6 +136,13 @@ export function PedidosTela({ financeiro, servicoFotos, hoje, versao = 0, onAlte
             </View>
             <Text style={estilos.subtitulo}>{NOME_TIPO_PEDIDO[p.tipo]} · {p.descricao}</Text>
             <Text style={estilos.subtitulo}>{p.fatura ? `Fatura de ${p.fatura.compras.length} compra(s)` : nomeCentro(p.centroId ?? '')}{p.vencimento ? ` · vence ${dataBR(p.vencimento)}` : ''}</Text>
+            {(() => {
+              const r = resumoNotas(p, hoje);
+              if (!r) return null;
+              if (r.pendente) return <Text testID={`notas-${p.id}`} style={{ color: cores.aviso, fontWeight: '700', fontSize: 13 }}>Notas pendentes: {r.falta > 0 ? `faltam ${reais(r.falta)}` : `passam ${reais(-r.falta)}`} · há {r.dias} dia(s)</Text>;
+              return <Text style={estilos.subtitulo}>Notas conferidas{r.falta ? ` (diferença de ${reais(Math.abs(r.falta))} explicada)` : ''}</Text>;
+            })()}
+            {comFiltro && p.pagamento && <Text style={estilos.subtitulo}>Pago em {dataBR(p.pagamento.data)} · {cad.empresas.find((e) => e.id === p.pagamento!.empresaId)?.apelido ?? '—'} / {cad.contas.find((c) => c.id === p.pagamento!.contaId)?.apelido ?? '—'} · {quemPagou(p)?.nome ?? '—'}</Text>}
             <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
               <Text style={{ color: COR_STATUS[p.status], fontWeight: '700', fontSize: 13 }}>{NOME_STATUS_PEDIDO[p.status]}</Text>
               {p.urgente && <Text style={{ color: cores.erro, fontWeight: '700', fontSize: 13 }}>URGENTE</Text>}
@@ -143,6 +190,7 @@ function PedidoForm({ financeiro, cad, servicoFotos, hoje, pedido, pedidos, onVo
   const [vencimento, setVencimento] = useState(pedido?.vencimento ? formatarDataBR(pedido.vencimento) : '');
   const [urgente, setUrgente] = useState(!!pedido?.urgente);
   const [justificativa, setJustificativa] = useState(pedido?.fatura?.justificativa ?? '');
+  const [terceirizado, setTerceirizado] = useState(!!pedido?.terceirizado);
   const [nota, setNota] = useState<Pedido['nota']>(pedido?.nota);
   const [anexos, setAnexos] = useState<AnexoPendente[]>([]);
   const [info, setInfo] = useState<string>();
@@ -192,7 +240,7 @@ function PedidoForm({ financeiro, cad, servicoFotos, hoje, pedido, pedidos, onVo
       ...(fornecedorId ? { fornecedorId } : {}), ...(favorecido.trim() ? { favorecido } : {}),
       ...(tipo !== 'boleto' && chavePix.trim() ? { chavePix } : {}), ...(tipo === 'boleto' ? { boleto } : {}),
       ...(tipo === 'reembolso' ? { reembolsoDe } : {}),
-      ...(venc ? { vencimento: venc } : {}), ...(urgente ? { urgente: true } : {}), ...(nota ? { nota } : {}),
+      ...(venc ? { vencimento: venc } : {}), ...(urgente ? { urgente: true } : {}), ...(nota ? { nota } : {}), ...(terceirizado ? { terceirizado: true } : {}),
     };
     setSalvando(true);
     try {
@@ -242,6 +290,12 @@ function PedidoForm({ financeiro, cad, servicoFotos, hoje, pedido, pedidos, onVo
         <Campo testID="pedido-valor" rotulo="Valor (R$)" value={valor} onChangeText={setValor} keyboardType="decimal-pad" />
         <Campo testID="pedido-vencimento" rotulo={tipo === 'boleto' ? 'Vencimento' : 'Pagar até (opcional)'} placeholder="dd/mm/aaaa" value={vencimento} onChangeText={setVencimento} />
         <View style={estilos.linha}><Text style={estilos.titulo}>Urgente</Text><Switch testID="pedido-urgente" value={urgente} onValueChange={setUrgente} /></View>
+        {podeConferirOuPagar(financeiro.usuario) && !pedido?.fatura && tipo !== 'reembolso' && (
+          <>
+            <View style={estilos.linha}><Text style={estilos.titulo}>Pagamento a terceirizado</Text><Switch testID="pedido-terceirizado" value={terceirizado} onValueChange={setTerceirizado} /></View>
+            {terceirizado && <Text style={estilos.subtitulo}>Paga agora; as notas fiscais chegam depois e, somadas, devem chegar ao valor pago. O app avisa enquanto faltar nota.</Text>}
+          </>
+        )}
       </Cartao>
 
       {pedido?.fatura && (
@@ -333,6 +387,7 @@ function PedidoDetalhe({ financeiro, cad, servicoFotos, hoje, pedido: p, versao,
         {!p.fatura && linha('Centro de custo', nome(cad.centros, p.centroId))}
         {!p.fatura && linha('Frente', p.frenteId ? nome(cad.frentes, p.frenteId) : undefined)}
         {!p.fatura && linha('Tipo de despesa', p.tipoDespesaId ? nome(cad.tipos, p.tipoDespesaId) : undefined)}
+        {p.terceirizado && linha('Tipo de pagamento', 'Terceirizado: notas fiscais chegam depois')}
         {p.fatura && linha('Soma das compras', reais(p.fatura.soma))}
         {p.fatura && linha('Diferença explicada', p.fatura.justificativa)}
         {linha('Nota fiscal', p.nota?.numero ? `Nº ${p.nota.numero}` : undefined)}
@@ -358,6 +413,10 @@ function PedidoDetalhe({ financeiro, cad, servicoFotos, hoje, pedido: p, versao,
             </View>
           ))}
         </Cartao>
+      )}
+
+      {p.terceirizado && p.status === 'pago' && gestor && (
+        <NotasTerceirizado financeiro={financeiro} pedido={p} hoje={hoje} servicoFotos={servicoFotos} onMudou={(ok) => onMudou(ok, false)} />
       )}
 
       {anexos.length > 0 && (
@@ -411,6 +470,86 @@ function PedidoDetalhe({ financeiro, cad, servicoFotos, hoje, pedido: p, versao,
       )}
       {erro && <Text testID="erro" style={estilos.erro}>{erro}</Text>}
     </ScrollView>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+
+/** Notas fiscais que o terceirizado envia depois do pagamento: lançar, remover e encerrar explicando a diferença. */
+function NotasTerceirizado({ financeiro, pedido: p, hoje, servicoFotos, onMudou }: {
+  financeiro: Financeiro; pedido: Pedido; hoje: string; servicoFotos: ServicoFotos; onMudou: (ok: string) => void;
+}) {
+  const r = resumoNotas(p, hoje)!;
+  const notas = p.terceirizado!.notas;
+  const [numero, setNumero] = useState('');
+  const [valor, setValor] = useState('');
+  const [emissao, setEmissao] = useState('');
+  const [arquivo, setArquivo] = useState<AnexoPendente>();
+  const [justificativa, setJustificativa] = useState('');
+  const [erro, setErro] = useState<string>();
+  const [aviso, setAviso] = useState<string>();
+  const concluir = (ok: string) => { setAviso(ok); onMudou(ok); };
+
+  const escolher = async () => {
+    setErro(undefined);
+    try {
+      const d: DocumentoEscolhido | undefined = servicoFotos.escolherDocumento ? await servicoFotos.escolherDocumento() : undefined;
+      if (!d) return;
+      setArquivo({ uri: d.uri, formato: d.formato, nome: d.nome });
+      if (d.formato === 'xml' && d.texto) {
+        const n = lerNotaXml(d.texto);
+        setNumero(n.numero); setValor(String(n.valor).replace('.', ','));
+        if (n.emissao) setEmissao(formatarDataBR(n.emissao.slice(0, 10)));
+      }
+    } catch (e) { setErro(msgErro(e)); }
+  };
+  const lancar = async () => {
+    setErro(undefined); setAviso(undefined);
+    try {
+      const v = lerNumero(valor);
+      if (v === undefined) throw new Error('Informe o valor da nota');
+      const nova: NovaNota = { numero, valor: v, ...(emissao.trim() ? { emissao: analisarDataBR(emissao) } : {}), ...(arquivo ? { arquivo } : {}) };
+      const novo = await financeiro.pedidos.lancarNota(p.id, nova);
+      setNumero(''); setValor(''); setEmissao(''); setArquivo(undefined);
+      concluir(novo.terceirizado?.encerrada ? 'Nota lançada: as notas fecharam o valor pago.' : 'Nota lançada.');
+    } catch (e) { setErro(msgErro(e) === 'Data inválida' ? 'Data de emissão inválida (use dia/mês/ano)' : msgErro(e)); }
+  };
+  const agir = async (fn: () => Promise<unknown>, ok: string) => { setErro(undefined); try { await fn(); concluir(ok); } catch (e) { setErro(msgErro(e)); } };
+
+  return (
+    <Cartao>
+      <Text style={estilos.secao}>Notas fiscais do terceirizado</Text>
+      <View style={estilos.linha}><Text style={estilos.subtitulo}>Valor pago</Text><Text style={estilos.valor}>{reais(r.pago)}</Text></View>
+      <View style={estilos.linha}><Text style={estilos.subtitulo}>Notas recebidas</Text><Text testID="notas-soma" style={estilos.valor}>{reais(r.soma)}</Text></View>
+      <View style={estilos.linha}>
+        <Text style={estilos.subtitulo}>{r.falta < 0 ? 'Notas acima do pago' : 'Falta receber'}</Text>
+        <Text testID="notas-falta" style={[estilos.valor, { color: r.falta === 0 ? cores.ok : cores.aviso }]}>{reais(Math.abs(r.falta))}</Text>
+      </View>
+      {r.pendente && <Text style={{ color: cores.aviso, fontWeight: '700' }}>Pendente há {r.dias} dia(s) desde o pagamento.</Text>}
+      {r.encerrada && <Text testID="notas-encerrada" style={{ color: cores.ok, fontWeight: '700' }}>{p.terceirizado!.encerrada?.justificativa ? `Encerrado: ${p.terceirizado!.encerrada.justificativa}` : 'As notas fecharam o valor pago.'}</Text>}
+      {notas.map((n) => (
+        <View key={n.id} style={{ gap: 2, borderTopWidth: 1, borderTopColor: cores.borda, paddingTop: 6 }}>
+          <View style={estilos.linha}><Text style={[estilos.titulo, { flex: 1 }]}>NF {n.numero}</Text><Text style={estilos.valor}>{reais(n.valor)}</Text></View>
+          <Text style={estilos.subtitulo}>{n.emissao ? `Emitida em ${dataBR(n.emissao)} · ` : ''}lançada por {n.criado.nome}</Text>
+          <Botao testID={`remover-nota-${n.id}`} secundario titulo="Remover esta nota" onPress={() => void agir(() => financeiro.pedidos.removerNota(p.id, n.id), 'Nota removida.')} />
+        </View>
+      ))}
+      {!r.encerrada && (
+        <>
+          <Text style={estilos.secao}>Lançar nota recebida</Text>
+          <Botao testID="nota-arquivo" secundario titulo={arquivo ? `Arquivo: ${arquivo.nome ?? arquivo.formato}` : 'Anexar a nota (XML lê sozinho; PDF ou foto)'} onPress={() => void escolher()} />
+          <Campo testID="nota-numero" rotulo="Número da nota" value={numero} onChangeText={setNumero} />
+          <Campo testID="nota-valor" rotulo="Valor da nota (R$)" value={valor} onChangeText={setValor} keyboardType="decimal-pad" />
+          <Campo testID="nota-emissao" rotulo="Emissão (opcional)" placeholder="dd/mm/aaaa" value={emissao} onChangeText={setEmissao} />
+          <Botao testID="lancar-nota" titulo="Lançar nota" onPress={() => void lancar()} />
+          <Text style={estilos.secao}>As notas não vão fechar o valor?</Text>
+          <Campo testID="notas-justificativa" rotulo="Explique a diferença (retenção de INSS/ISS, por exemplo)" value={justificativa} onChangeText={setJustificativa} />
+          <Botao testID="encerrar-notas" secundario titulo="Encerrar com justificativa" onPress={() => void agir(() => financeiro.pedidos.encerrarNotas(p.id, justificativa), 'Acompanhamento das notas encerrado.')} />
+        </>
+      )}
+      {aviso && !erro && <Text testID="aviso-notas" style={{ color: cores.ok, fontWeight: '600' }}>{aviso}</Text>}
+      {erro && <Text testID="erro-notas" style={estilos.erro}>{erro}</Text>}
+    </Cartao>
   );
 }
 
