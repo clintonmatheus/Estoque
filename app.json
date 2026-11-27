@@ -22,7 +22,8 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "name": "Estoque do galpão"
+      "name": "Estoque do galpão",
+      "shortName": "Estoque"
     },
     "plugins": [
       [

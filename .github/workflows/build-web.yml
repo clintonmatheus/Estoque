@@ -26,6 +26,8 @@ jobs:
         run: |
           node -e "const f='app.json';const c=require('./'+f);c.expo.experiments={baseUrl:'/${{ github.event.repository.name }}'};require('fs').writeFileSync(f,JSON.stringify(c,null,2))"
       - run: npx expo export --platform web --output-dir dist
+      - name: Ícone e instalação na tela inicial (PWA)
+        run: node scripts/pwa.mjs dist "/${{ github.event.repository.name }}"
       - run: cp dist/index.html dist/404.html
       - name: Publicar na ramificação gh-pages
         run: |

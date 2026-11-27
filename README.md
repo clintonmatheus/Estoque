@@ -123,3 +123,7 @@ Item de EPI com "tamanhos disponíveis" tem o saldo separado por tamanho: a comp
 ## Pagamento a terceirizado e filtros de pagamentos
 - **Terceirizado** (só pagador e administradores abrem): ao criar o pedido, ligue *Pagamento a terceirizado*. O pagamento segue o fluxo normal (um centro de custo e frente por pedido). Depois de pago, o pedido aparece em *Notas pendentes*, com o que falta e os dias desde o pagamento; ali se **lança cada nota** (número, valor, emissão e arquivo; o XML preenche sozinho). Quando as notas somam o valor pago, o acompanhamento **fecha sozinho**; se não fecharem (retenções, por exemplo), *Encerrar com justificativa*. Remover uma nota reabre o que tinha fechado sozinho.
 - **Pagamentos → Todos** (para quem confere, paga ou administra): filtros por **empresa**, **banco/conta**, **quem pagou** e **período** (data do pagamento), com o total dos pagamentos filtrados.
+
+## iPhone sem App Store (atalho na tela inicial)
+
+A versão web (`https://clintonmatheus.github.io/Estoque/`) pode ser instalada no iPhone como atalho: Safari → Compartilhar → **Adicionar à Tela de Início**. O app abre em tela cheia, com o ícone do Estoque. O passo `scripts/pwa.mjs` (executado em "Publicar versão web") grava o manifesto e as marcas de ícone no `index.html`; os ícones ficam em `public/icones/` (gerados de `assets/icon.png`). Depois de alterar o ícone, regenere os três tamanhos (192, 512 e 180 px) e publique de novo. A versão web precisa de internet e o iPhone guarda os dados do atalho separados dos do Safari.
