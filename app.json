@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Estoque",
+    "name": "Passos Gestão",
     "slug": "Estoque",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -22,8 +22,8 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "name": "Estoque do galpão",
-      "shortName": "Estoque"
+      "name": "Passos Gestão",
+      "shortName": "Passos"
     },
     "plugins": [
       [

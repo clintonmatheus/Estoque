@@ -1,4 +1,4 @@
-# Estoque do galpão
+# Passos Gestão (estoque do galpão, pagamentos e financeiro)
 
 App (Android, iPhone e navegador) para controlar materiais, ferramentas e EPIs do galpão: entradas com nota fiscal,
 saídas para as frentes de serviço, devoluções, transferências, inventário e relatórios em PDF e Excel.
