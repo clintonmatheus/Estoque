@@ -1,12 +1,18 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
+/** Nome de arquivo sem pastas: o id vem do servidor e não pode apontar para fora da pasta de anexos. */
+function nomeSeguro(nome: string): string {
+  if (!/^[A-Za-z0-9_-]{1,100}\.[A-Za-z0-9]{1,5}$/.test(nome)) throw new Error('Nome de arquivo inválido');
+  return nome;
+}
+
 /** Arquivos no celular (expo-file-system). A versão para navegador fica em arquivos.web.ts. */
 export const arquivos = {
   ler: (uri: string) => new File(uri).bytes(),
   async baixar(url: string, nome: string): Promise<string> {
     const pasta = new Directory(Paths.document, 'anexos');
     if (!pasta.exists) pasta.create();
-    const destino = new File(pasta, nome);
+    const destino = new File(pasta, nomeSeguro(nome));
     if (destino.exists) destino.delete();
     return (await File.downloadFileAsync(url, destino)).uri;
   },
@@ -14,7 +20,7 @@ export const arquivos = {
   guardar(uriOrigem: string, nome: string): string {
     const pasta = new Directory(Paths.document, 'anexos');
     if (!pasta.exists) pasta.create();
-    const destino = new File(pasta, nome);
+    const destino = new File(pasta, nomeSeguro(nome));
     new File(uriOrigem).copy(destino);
     return destino.uri;
   },

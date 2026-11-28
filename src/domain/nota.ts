@@ -1,4 +1,4 @@
-import { bloco, dataIso, lerNfeXml, numero, valorTag, type DuplicataNfe } from './nfe';
+import { bloco, blocos, dataIso, semComentarios, lerNfeXml, numero, valorTag, type DuplicataNfe } from './nfe';
 
 /** Nota fiscal lida de um XML: NF-e (produtos, modelo 55) ou NFS-e (serviços, padrão ABRASF ou nacional). */
 export interface NotaLida {
@@ -21,7 +21,7 @@ const doc = (b?: string) => {
 
 /** NFS-e: padrão ABRASF (CompNfse/InfNfse, usado por muitas prefeituras) e padrão nacional (NFSe/infNFSe). */
 export function lerNfseXml(xml: string): NotaLida {
-  const limpo = xml.replace(/<!--[\s\S]*?-->/g, '').replace(/^﻿/, '');
+  const limpo = semComentarios(xml);
   const incompleto = () => new Error('XML da NFS-e incompleto: faltam número, valor ou prestador');
 
   const abrasf = bloco(limpo, 'InfNfse');
@@ -42,9 +42,9 @@ export function lerNfseXml(xml: string): NotaLida {
     };
   }
 
-  const nac = limpo.match(/<(?:\w+:)?infNFSe\b[^>]*>([\s\S]*?)<\/(?:\w+:)?infNFSe>/);
+  const nac = blocos(limpo, 'infNFSe', true)[0];
   if (nac) {
-    const corpo = nac[1];
+    const corpo = nac.conteudo;
     const emit = bloco(corpo, 'emit');
     const toma = bloco(corpo, 'toma');
     const valor = numero(valorTag(bloco(corpo, 'valores'), 'vLiq')) ?? numero(valorTag(corpo, 'vServ'));
@@ -52,7 +52,7 @@ export function lerNfseXml(xml: string): NotaLida {
     if (valor === undefined || !num || !emit) throw incompleto();
     const documentoEmit = valorTag(emit, 'CNPJ') ?? valorTag(emit, 'CPF') ?? '';
     return {
-      tipo: 'nfse', chave: nac[0].match(/\bId="(?:NFS)?(\d+)"/)?.[1] ?? `${documentoEmit}-${num}`, numero: num, valor,
+      tipo: 'nfse', chave: nac.atributos.match(/\bId="(?:NFS)?(\d+)"/)?.[1] ?? `${documentoEmit}-${num}`, numero: num, valor,
       emissao: dataIso(valorTag(corpo, 'dhProc') ?? valorTag(corpo, 'dhEmi') ?? valorTag(corpo, 'dCompet')),
       emitente: { documento: documentoEmit, nome: valorTag(emit, 'xNome') ?? '' },
       ...(toma ? { destinatario: { documento: valorTag(toma, 'CNPJ') ?? valorTag(toma, 'CPF') ?? '', nome: valorTag(toma, 'xNome') ?? '' } } : {}),

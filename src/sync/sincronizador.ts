@@ -1,4 +1,5 @@
 import type { Anexo } from '../domain/tipos';
+import { documentoValido } from './validar';
 import { TABELAS, type Armazenamento, type Colecao, type Tabela } from '../storage/contrato';
 import type { Remoto } from './remoto';
 
@@ -74,6 +75,7 @@ export class Sincronizador {
     const col = this.colecao(t);
     let mudou = 0;
     for (const item of lote.itens as { id: string }[]) {
+      if (!documentoValido(t, item)) continue; // registro malformado no servidor: ignorado para não travar o aparelho
       if (await this.a.fila.contem(t, item.id)) continue; // alteração local pendente prevalece
       const local = await col.obter(item.id);
       // anexos: o endereço do arquivo é de cada aparelho

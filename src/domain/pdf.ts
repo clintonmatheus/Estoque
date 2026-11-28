@@ -1,4 +1,4 @@
-import { inflate } from 'pako';
+import { Inflate } from 'pako';
 import { lerBoleto, type BoletoLido } from './boleto';
 
 /**
@@ -7,6 +7,56 @@ import { lerBoleto, type BoletoLido } from './boleto';
  * (só imagem) não tem texto e devolve vazio.
  */
 
+/** Limites para um PDF recebido de fora não travar nem estourar a memória do aparelho. */
+const MAX_PDF = 15 * 1024 * 1024;
+const MAX_FLUXO = 10 * 1024 * 1024;
+const MAX_TOTAL = 40 * 1024 * 1024;
+const MAX_FLUXOS = 3000;
+
+/** Descomprime parando no limite (um arquivo pequeno pode se expandir para gigabytes). */
+function inflarLimitado(dados: Uint8Array, limite: number): Uint8Array {
+  const inf = new Inflate();
+  const partes: Uint8Array[] = [];
+  let total = 0;
+  inf.onData = (c: Uint8Array) => {
+    total += c.length;
+    if (total > limite) throw new Error('Fluxo do PDF grande demais');
+    partes.push(c);
+  };
+  inf.push(dados, true);
+  if (inf.err && !partes.length) throw new Error(inf.msg || 'Fluxo inválido');
+  const saida = new Uint8Array(total);
+  let i = 0;
+  for (const c of partes) { saida.set(c, i); i += c.length; }
+  return saida;
+}
+
+/** Trechos entre `ini` e `fim` (o primeiro `fim` depois de cada `ini`), em tempo linear. */
+function trechos(t: string, ini: string, fim: string): string[] {
+  const r: string[] = [];
+  let pos = 0;
+  for (;;) {
+    const a = t.indexOf(ini, pos);
+    if (a < 0) return r;
+    const b = t.indexOf(fim, a + ini.length);
+    if (b < 0) return r;
+    r.push(t.slice(a + ini.length, b));
+    pos = b + fim.length;
+  }
+}
+
+/** Fim de uma cadeia literal "( … )" que começa em `i` (com escapes e parênteses aninhados); -1 se não fecha. */
+function fimLiteral(t: string, i: number): number {
+  let nivel = 0;
+  for (let j = i; j < t.length; j++) {
+    const c = t[j];
+    if (c === '\\') { j++; continue; }
+    if (c === '(') nivel++;
+    else if (c === ')' && --nivel === 0) return j;
+  }
+  return -1;
+}
+
 const latin1 = (b: Uint8Array) => { let s = ''; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); return s; };
 
 function fluxos(bytes: Uint8Array): { dicionario: string; dados: Uint8Array }[] {
@@ -14,15 +64,19 @@ function fluxos(bytes: Uint8Array): { dicionario: string; dados: Uint8Array }[] 
   const saida: { dicionario: string; dados: Uint8Array }[] = [];
   const re = /stream\r?\n/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(t))) {
+  let total = 0;
+  while ((m = re.exec(t)) && saida.length < MAX_FLUXOS) {
     const ini = m.index + m[0].length;
     const fim = t.indexOf('endstream', ini);
     if (fim < 0) break;
     const dicionario = t.slice(Math.max(0, t.lastIndexOf('obj', m.index)), m.index);
     let dados = bytes.subarray(ini, fim);
     if (/\/ASCII85Decode/.test(dicionario)) dados = ascii85(dados);
-    if (/\/FlateDecode/.test(dicionario)) { try { dados = inflate(dados); } catch { try { dados = inflate(dados.subarray(0, Math.max(0, dados.length - 1))); } catch { dados = new Uint8Array(0); } } }
+    const limite = Math.min(MAX_FLUXO, MAX_TOTAL - total);
+    if (/\/FlateDecode/.test(dicionario)) { try { dados = inflarLimitado(dados, limite); } catch { dados = new Uint8Array(0); } }
     else if (/\/Filter/.test(dicionario) && !/\/ASCII85Decode/.test(dicionario)) dados = new Uint8Array(0); // outros filtros (imagens): sem texto
+    if (dados.length > limite) dados = new Uint8Array(0);
+    total += dados.length;
     saida.push({ dicionario, dados });
     re.lastIndex = fim + 9;
   }
@@ -57,11 +111,11 @@ function lerCmaps(textos: string[]): Map<string, string> {
   const mapa = new Map<string, string>();
   for (const t of textos) {
     if (!t.includes('begincmap')) continue;
-    for (const bloco of t.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) {
-      for (const p of bloco[1].matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/g)) mapa.set(p[1].toUpperCase(), unicodeDeHex(p[2]));
+    for (const bloco of trechos(t, 'beginbfchar', 'endbfchar')) {
+      for (const p of bloco.matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/g)) mapa.set(p[1].toUpperCase(), unicodeDeHex(p[2]));
     }
-    for (const bloco of t.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)) {
-      for (const p of bloco[1].matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*(<[0-9a-fA-F]+>|\[[^\]]*\])/g)) {
+    for (const bloco of trechos(t, 'beginbfrange', 'endbfrange')) {
+      for (const p of bloco.matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*(<[0-9a-fA-F]+>|\[[^\]]*\])/g)) {
         const largura = p[1].length;
         const de = parseInt(p[1], 16); const ate = parseInt(p[2], 16);
         if (p[3].startsWith('[')) {
@@ -94,13 +148,18 @@ function decodificarHex(h: string, mapa: Map<string, string>): string {
 
 function textoDoConteudo(conteudo: string, mapa: Map<string, string>): string {
   let saida = '';
-  for (const bt of conteudo.matchAll(/BT([\s\S]*?)ET/g)) {
-    const corpo = bt[1];
+  for (const corpo of trechos(conteudo, 'BT', 'ET')) {
     // percorre cadeias literais, hexadecimais e operadores que mudam de linha
-    const re = /\((?:\\[\s\S]|[^\\)])*\)|<([0-9a-fA-F\s]+)>|(-?\d+\.?\d*)|(T\*|Td|TD|Tm|'|")|(Tj|TJ)/g;
+    const re = /\(|<([0-9a-fA-F\s]+)>|(-?\d+\.?\d*)|(T\*|Td|TD|Tm|'|")|(Tj|TJ)/g;
     let m: RegExpExecArray | null; let pendente = '';
     while ((m = re.exec(corpo))) {
-      if (m[0].startsWith('(')) pendente += mapa.size ? decodificarHex(Array.from(textoLiteral(m[0].slice(1, -1))).map((c) => c.charCodeAt(0).toString(16).padStart(2, '0')).join(''), mapa) : textoLiteral(m[0].slice(1, -1));
+      if (m[0] === '(') {
+        const f = fimLiteral(corpo, m.index);
+        if (f < 0) break; // cadeia sem fim: o resto do bloco não tem texto confiável
+        const lit = corpo.slice(m.index + 1, f);
+        re.lastIndex = f + 1;
+        pendente += mapa.size ? decodificarHex(Array.from(textoLiteral(lit)).map((c) => c.charCodeAt(0).toString(16).padStart(2, '0')).join(''), mapa) : textoLiteral(lit);
+      }
       else if (m[1] !== undefined) pendente += decodificarHex(m[1], mapa);
       else if (m[2] !== undefined) { if (Number(m[2]) < -250 && pendente) pendente += ' '; }
       else if (m[3]) { if (pendente) { saida += `${pendente}\n`; pendente = ''; } }
@@ -113,10 +172,11 @@ function textoDoConteudo(conteudo: string, mapa: Map<string, string>): string {
 
 /** Texto do PDF (linhas separadas por quebra). Vazio quando o PDF é só imagem ou está protegido. */
 export function extrairTextoPdf(bytes: Uint8Array): string {
+  if (bytes.length > MAX_PDF) throw new Error('PDF grande demais para ler (máximo 15 MB)');
   const fl = fluxos(bytes);
   const textos = fl.map((f) => latin1(f.dados));
   const mapa = lerCmaps(textos);
-  return textos.filter((t) => /\bBT\b[\s\S]*\bET\b/.test(t) && /T[jJ]/.test(t)).map((t) => textoDoConteudo(t, mapa)).join('\n');
+  return textos.filter((t) => { const a = t.indexOf('BT'); return a >= 0 && t.indexOf('ET', a + 2) >= 0 && /T[jJ]/.test(t); }).map((t) => textoDoConteudo(t, mapa)).join('\n');
 }
 
 /** Procura no texto um código de boleto válido (confere os dígitos verificadores de cada candidato). */

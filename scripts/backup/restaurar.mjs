@@ -9,7 +9,7 @@
 // Perfis (papel de cada pessoa) só são restaurados para logins que existem; crie os logins antes (usuarios.json lista os e-mails).
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { BUCKET, TABELAS } from './backup.mjs';
+import { BUCKET, TABELAS, caminhoSeguro } from './backup.mjs';
 
 const lit = (v) => (v === null || v === undefined ? 'null' : `'${String(v).replace(/'/g, "''")}'`);
 const jsonb = (v) => (v === null || v === undefined ? 'null' : `${lit(JSON.stringify(v))}::jsonb`);
@@ -54,6 +54,7 @@ export async function restaurarArquivos(sb, pasta) {
   let n = 0;
   for (const c of await arquivosDaPasta(base)) {
     const caminho = relative(base, c).split('\\').join('/');
+    if (!caminhoSeguro(caminho)) continue;
     const { error } = await sb.storage.from(BUCKET).upload(caminho, await readFile(c), { upsert: true });
     if (error) throw new Error(`${caminho}: ${error.message}`);
     n += 1;
