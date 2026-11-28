@@ -1,0 +1,8 @@
+{
+  "name": "estoque-backup",
+  "private": true,
+  "description": "Dependências da cópia diária (versão fixa: a tarefa roda com a chave secreta do Supabase)",
+  "dependencies": {
+    "@supabase/supabase-js": "2.119.0"
+  }
+}

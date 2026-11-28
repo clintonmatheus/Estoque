@@ -39,8 +39,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+      # Versão fixa e conferida pelo package-lock: esta tarefa roda com a chave secreta do Supabase.
       - name: Instalar só o cliente do Supabase
-        run: cd scripts/backup && npm init -y >/dev/null && npm install --no-audit --no-fund @supabase/supabase-js@2 >/dev/null
+        run: npm ci --prefix scripts/backup --no-audit --no-fund --ignore-scripts >/dev/null
       - name: Testar o script de cópia
         run: node --test scripts/backup/backup.test.mjs
       - name: Copiar os dados

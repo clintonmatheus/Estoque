@@ -1,0 +1,57 @@
+name: Publicar versão web (Cloudflare Pages)
+
+# Publica a versão web no Cloudflare Pages, que funciona com repositório privado (o GitHub Pages gratuito não).
+# Uma vez (veja "Versão web no Cloudflare Pages" no README):
+#   Secrets (Settings → Secrets and variables → Actions → New repository secret):
+#     CLOUDFLARE_API_TOKEN   chave da Cloudflare com a permissão "Cloudflare Pages: Edit"
+#     CLOUDFLARE_ACCOUNT_ID  identificador da conta (aparece na página inicial do painel da Cloudflare)
+#   Opcional (Variables → New repository variable): CF_PROJETO, nome do projeto/endereço (padrão: passos-gestao).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-cloudflare
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    env:
+      PROJETO: ${{ vars.CF_PROJETO || 'passos-gestao' }}
+    steps:
+      - name: Conferir segredos
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONTA: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$CONTA" ]; then
+            echo "::error::Cadastre os segredos CLOUDFLARE_API_TOKEN e CLOUDFLARE_ACCOUNT_ID (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test -- --ci
+      # No Cloudflare o app fica na raiz do endereço (https://<projeto>.pages.dev/), sem /nome-do-repositório.
+      - run: npx expo export --platform web --output-dir dist
+      - name: Ícone e instalação na tela inicial (PWA)
+        run: node scripts/pwa.mjs dist ""
+      - name: Cabeçalhos de segurança
+        run: |
+          printf '%s\n' '/*' \
+            '  X-Frame-Options: DENY' \
+            '  X-Content-Type-Options: nosniff' \
+            '  Referrer-Policy: strict-origin-when-cross-origin' > dist/_headers
+      - name: Publicar no Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --yes wrangler@4.161.0 pages project create "$PROJETO" --production-branch=main || echo "Projeto já existe."
+          npx --yes wrangler@4.161.0 pages deploy dist --project-name="$PROJETO" --branch=main --commit-dirty=true

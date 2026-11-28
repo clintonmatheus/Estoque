@@ -27,6 +27,8 @@ saídas para as frentes de serviço, devoluções, transferências, inventário 
 
 **Atualização (Financeiro, etapa 1):** rode `supabase/006_financeiro_cadastros.sql` e depois `supabase/006b_perfis_financeiro.sql` (troque os e-mails).
 
+**Atualização (segurança dos pagamentos):** rode `supabase/015_proteger_favorecido.sql` (depois da 014). Depois da conferência, só o administrador muda fornecedor, favorecido, chave Pix ou boleto de um pedido. E em **Authentication → Sign In / Providers**, desligue **Allow new users to sign up** (os logins são criados só por você).
+
 **Atualização (terceirizados):** rode `supabase/014_terceirizados.sql` (depois da 013). Use `supabase/000_verificar.sql` para ver quais scripts já foram aplicados.
 
 **Atualização (backup e auditoria):** rode `supabase/013_auditoria_seguranca.sql` e cadastre os segredos `SUPABASE_SERVICE_KEY` e `BACKUP_SENHA` no GitHub (veja "Backup e segurança").
@@ -127,3 +129,14 @@ Item de EPI com "tamanhos disponíveis" tem o saldo separado por tamanho: a comp
 ## iPhone sem App Store (atalho na tela inicial)
 
 A versão web (`https://clintonmatheus.github.io/Passos-Gestao/`) pode ser instalada no iPhone como atalho: Safari → Compartilhar → **Adicionar à Tela de Início**. O app abre em tela cheia, com o ícone do Estoque. O passo `scripts/pwa.mjs` (executado em "Publicar versão web") grava o manifesto e as marcas de ícone no `index.html`; os ícones ficam em `public/icones/` (gerados de `assets/icon.png`). Depois de alterar o ícone, regenere os três tamanhos (192, 512 e 180 px) e publique de novo. A versão web precisa de internet e o iPhone guarda os dados do atalho separados dos do Safari.
+
+## Versão web no Cloudflare Pages (repositório privado)
+O GitHub Pages gratuito só funciona com repositório público. Para deixar o repositório privado sem perder a versão web e o atalho do iPhone, publique no Cloudflare Pages (grátis). Cada app fica num endereço próprio (ex.: `https://passos-gestao.pages.dev`).
+
+1. Crie uma conta grátis em dash.cloudflare.com.
+2. **Chave de acesso:** ícone do perfil → *My Profile* → *API Tokens* → *Create Token* → *Create Custom Token*. Em *Permissions*, escolha *Account* · *Cloudflare Pages* · *Edit*. Crie e copie a chave (ela aparece uma vez só).
+3. **Identificador da conta:** em *Workers & Pages*, copie o *Account ID* mostrado na lateral.
+4. No GitHub, neste repositório: *Settings → Secrets and variables → Actions → New repository secret*: `CLOUDFLARE_API_TOKEN` (a chave) e `CLOUDFLARE_ACCOUNT_ID` (o identificador).
+5. *Actions → Publicar versão web (Cloudflare Pages) → Run workflow*. O endereço aparece no fim do log. Se o nome estiver ocupado, crie a variável `CF_PROJETO` (*Variables → New repository variable*) com outro nome e rode de novo.
+6. **iPhone:** abra o endereço novo no Safari, entre com seu login, toque em *Compartilhar → Adicionar à Tela de Início* e apague o atalho antigo. 
+7. Só depois: *Settings → General → Change repository visibility → Private* e, em *Settings → Pages*, desative o site antigo (pode apagar a ramificação `gh-pages`).
