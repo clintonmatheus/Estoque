@@ -18,7 +18,9 @@ update public.perfis p
   join auth.users u on lower(u.email) = lower(v.email)
  where p.id = u.id;
 
--- Quem já usa o app e está identificado pelo nome (Clinton, Marilia e Arthur)
+-- Quem já usa o app e está identificado pelo nome (Clinton, Marilia e Arthur).
+-- Segurança: o nome vem do cadastro e qualquer um pode escolher o mesmo. Se houver mais de um perfil com o nome,
+-- nenhum recebe o papel (confira a lista no fim e use o bloco do e-mail acima para essa pessoa).
 update public.perfis p
    set papel = v.papel, financeiro = v.financeiro, paga = v.paga
   from (values
@@ -26,7 +28,8 @@ update public.perfis p
     ('Marilia', 'almoxarife', 'solicitante', false),
     ('Arthur',  'consultor',  'admin',       false)
   ) as v (nome, papel, financeiro, paga)
- where p.nome = v.nome;
+ where p.nome = v.nome
+   and (select count(*) from public.perfis o where o.nome = v.nome) = 1;
 
 -- Conferência: cada pessoa com o papel certo nos pilares
 select u.email, p.nome, p.papel as estoque, p.financeiro as pagamentos, p.paga

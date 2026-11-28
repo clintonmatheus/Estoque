@@ -29,6 +29,8 @@ saídas para as frentes de serviço, devoluções, transferências, inventário 
 
 **Atualização (segurança dos pagamentos):** rode `supabase/015_proteger_favorecido.sql` (depois da 014). Depois da conferência, só o administrador muda fornecedor, favorecido, chave Pix ou boleto de um pedido. E em **Authentication → Sign In / Providers**, desligue **Allow new users to sign up** (os logins são criados só por você).
 
+**Atualização (auditoria completa):** rode `supabase/016_estados_e_conteudo.sql` (depois da 015). Pedido cancelado ou rejeitado não é reaberto, pedido pago não volta atrás (só o administrador altera) e o servidor recusa registro malformado gravado fora do app.
+
 **Atualização (terceirizados):** rode `supabase/014_terceirizados.sql` (depois da 013). Use `supabase/000_verificar.sql` para ver quais scripts já foram aplicados.
 
 **Atualização (backup e auditoria):** rode `supabase/013_auditoria_seguranca.sql` e cadastre os segredos `SUPABASE_SERVICE_KEY` e `BACKUP_SENHA` no GitHub (veja "Backup e segurança").

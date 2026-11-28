@@ -27,3 +27,22 @@ describe('leitura de PDF', () => {
     expect(extrairTextoPdf(new Uint8Array([1, 2, 3]))).toBe('');
   });
 });
+
+describe('PDF hostil (recebido de fora)', () => {
+  const { deflateSync } = require('node:zlib') as typeof import('node:zlib');
+  const pdf = (conteudo: Uint8Array) => {
+    const cab = new TextEncoder().encode('%PDF-1.4\n1 0 obj << /Filter /FlateDecode >> stream\n');
+    const fim = new TextEncoder().encode('\nendstream endobj\n');
+    return Uint8Array.from([...cab, ...conteudo, ...fim]);
+  };
+  it('não trava com muitos BT sem ET nem com cadeia que não fecha', () => {
+    const ini = Date.now();
+    expect(extrairTextoPdf(pdf(deflateSync('BT '.repeat(120000) + ' Tj')))).toBe('');
+    extrairTextoPdf(pdf(deflateSync('BT ' + '('.repeat(100000) + ' Tj ET')));
+    expect(Date.now() - ini).toBeLessThan(2000);
+  });
+  it('não descomprime além do limite', () => {
+    const bomba = deflateSync(Buffer.alloc(200 * 1024 * 1024, 32));
+    expect(extrairTextoPdf(pdf(bomba))).toBe('');
+  });
+});

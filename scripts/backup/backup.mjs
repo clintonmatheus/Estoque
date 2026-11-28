@@ -22,6 +22,13 @@ export async function exportarTabela(sb, tabela) {
   }
 }
 
+/** Caminho de arquivo do bucket que pode virar caminho no disco: sem "..", sem barra no início e sem "\\". */
+export function caminhoSeguro(caminho) {
+  const partes = String(caminho).split('/');
+  return caminho.length > 0 && !caminho.startsWith('/') && !caminho.includes('\\')
+    && partes.every((p) => p !== '' && p !== '.' && p !== '..');
+}
+
 /** Caminhos de todos os arquivos do bucket (as "pastas" são o id do lançamento, do pedido ou da compra). */
 export async function listarArquivos(sb, prefixo = '') {
   const caminhos = [];
@@ -30,6 +37,7 @@ export async function listarArquivos(sb, prefixo = '') {
     if (error) throw new Error(`arquivos: ${error.message}`);
     for (const x of data) {
       const caminho = prefixo ? `${prefixo}/${x.name}` : x.name;
+      if (!caminhoSeguro(caminho)) continue; // nome que sairia da pasta do backup: não segue nem grava
       if (x.id === null || x.id === undefined) caminhos.push(...(await listarArquivos(sb, caminho))); // pasta
       else caminhos.push(caminho);
     }
@@ -66,6 +74,7 @@ export async function fazerBackup(sb, pasta, agora = new Date()) {
   resumo.usuarios = usuarios.length;
   await gravar(join(pasta, 'usuarios.json'), JSON.stringify(usuarios, null, 1));
   for (const caminho of await listarArquivos(sb)) {
+    if (!caminhoSeguro(caminho)) continue;
     const { data, error } = await sb.storage.from(BUCKET).download(caminho);
     if (error) throw new Error(`arquivo ${caminho}: ${error.message}`);
     const bytes = Buffer.from(await data.arrayBuffer());

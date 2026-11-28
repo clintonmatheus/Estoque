@@ -115,3 +115,18 @@ describe('Sincronizador', () => {
     expect((await a.estoque.movimentosBens())).toHaveLength(3);
   });
 });
+
+describe('registro malformado vindo do servidor', () => {
+  it('é ignorado e não trava o estoque de quem sincroniza', async () => {
+    const { remoto, a, b, tinta } = await preparar();
+    await a.estoque.lancar({ tipo: 'entrada', data: '2026-11-10', linhas: [{ itemId: tinta.id, quantidade: 10, custoUnitario: 50 }] });
+    await a.sync.sincronizar();
+    // gravado direto na API, sem o app: movimento sem autoria e anexo com id que vira caminho de arquivo
+    await remoto.enviar('movimentos', { id: 'ruim1', tipo: 'epi', itemId: tinta.id, quantidade: 1, data: '2026-11-11' } as never);
+    await remoto.enviar('anexos', { id: '../x', criado: { id: 'u', nome: 'U', em: '2026-11-11T00:00:00Z' } } as never);
+    await b.sync.sincronizar();
+    expect(await b.armazenamento.movimentos.obter('ruim1')).toBeUndefined();
+    expect(await b.armazenamento.anexos.obter('../x')).toBeUndefined();
+    expect((await b.estoque.posicao()).itens[tinta.id].quantidade).toBe(10);
+  });
+});

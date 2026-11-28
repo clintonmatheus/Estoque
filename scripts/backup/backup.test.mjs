@@ -3,7 +3,8 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { fazerBackup, TABELAS } from './backup.mjs';
+import { caminhoSeguro, fazerBackup, TABELAS } from './backup.mjs';
+import { access } from 'node:fs/promises';
 import { gerarSql } from './restaurar.mjs';
 
 /** Supabase de mentira: tabelas em memória, um bucket com pastas, logins. */
@@ -53,6 +54,19 @@ test('backup grava todas as tabelas, logins e arquivos (com pastas), e ignora ta
   assert.equal((sql.match(/insert into public\.pedidos/g) ?? []).length, 5); // lotes de 500
   assert.match(sql, /insert into public\.perfis .* where exists \(select 1 from auth\.users/);
   assert.match(sql, /commit;\n$/);
+});
+
+test('backup não grava fora da pasta quando o nome do arquivo tem ".."', async () => {
+  const tabelas = Object.fromEntries(TABELAS.map((t) => [t, []]));
+  const sb = falso({ tabelas, arquivos: { '../../fora.txt': 'X', 'p1/../../fora2.txt': 'Y', 'p1/ok.pdf': '%PDF' }, usuarios: [] });
+  const raiz = await mkdtemp(join(tmpdir(), 'bk-'));
+  const pasta = join(raiz, 'a', 'b');
+  const r = await fazerBackup(sb, pasta);
+  assert.equal(r.arquivos, 1);
+  await assert.rejects(access(join(raiz, 'fora.txt')));
+  await assert.rejects(access(join(pasta, 'fora2.txt')));
+  assert.equal(caminhoSeguro('p1/ok.pdf'), true);
+  for (const c of ['', '/x', '..', 'a/../b', 'a//b', 'a\\b']) assert.equal(caminhoSeguro(c), false, c);
 });
 
 test('abrir.mjs descriptografa o que o openssl da tarefa agendada gera', async () => {

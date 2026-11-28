@@ -32,3 +32,15 @@ describe('leitura de XML da NF-e', () => {
     expect(() => lerNfeXml(XML.replace('<vNF>2100.50</vNF>', ''))).toThrow('incompleto');
   });
 });
+
+describe('XML hostil (recebido de fora)', () => {
+  it('comentários e tags sem fechamento não travam a leitura', () => {
+    const ini = Date.now();
+    expect(() => lerNfeXml('<!--'.repeat(200000))).toThrow('XML não reconhecido');
+    expect(() => lerNfeXml('<infNFe Id="NFe' + '1'.repeat(44) + '">' + '<dup>'.repeat(200000))).toThrow();
+    expect(Date.now() - ini).toBeLessThan(2000);
+  });
+  it('recusa XML grande demais', () => {
+    expect(() => lerNfeXml(' '.repeat(6 * 1024 * 1024))).toThrow('grande demais');
+  });
+});

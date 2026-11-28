@@ -18,10 +18,48 @@ const decodificar = (s: string) => s.replace(/&(#x?[0-9a-fA-F]+|\w+);/g, (m, e: 
   return ENT[e] ?? m;
 }).trim();
 
+/** Tamanho máximo de XML lido: notas reais têm poucas centenas de kB. */
+const MAX_XML = 5 * 1024 * 1024;
+
+/** Tira comentários em tempo linear (comentário sem fim corta o resto). */
+export function semComentarios(xml: string): string {
+  if (xml.length > MAX_XML) throw new Error('XML grande demais para ler (máximo 5 MB)');
+  let r = ''; let pos = 0;
+  for (;;) {
+    const a = xml.indexOf('<!--', pos);
+    if (a < 0) return (r + xml.slice(pos)).replace(/^\uFEFF/, '');
+    r += xml.slice(pos, a);
+    const b = xml.indexOf('-->', a + 4);
+    if (b < 0) return r.replace(/^\uFEFF/, '');
+    pos = b + 3;
+  }
+}
+
+/** Ocorrências de <tag>…</tag> (ignora prefixo de namespace), em tempo linear: abertura sem fechamento encerra a busca. */
+export function blocos(xml: string, tag: string, atributos = false): { atributos: string; conteudo: string }[] {
+  const abre = new RegExp(`<(?:\\w{1,40}:)?${tag}(\\s[^<>]{0,2000})?>`, 'g');
+  const fecha = new RegExp(`</(?:\\w{1,40}:)?${tag}>`, 'g');
+  const r: { atributos: string; conteudo: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = abre.exec(xml))) {
+    fecha.lastIndex = abre.lastIndex;
+    const f = fecha.exec(xml);
+    if (!f) break;
+    r.push({ atributos: atributos ? m[1] ?? '' : '', conteudo: xml.slice(abre.lastIndex, f.index) });
+    abre.lastIndex = fecha.lastIndex;
+  }
+  return r;
+}
+
 /** Conteúdo da primeira ocorrência de <tag>…</tag> dentro de `xml` (ignora prefixo de namespace). */
 export function bloco(xml: string, tag: string): string | undefined {
-  const m = xml.match(new RegExp(`<(?:\\w+:)?${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:\\w+:)?${tag}>`));
-  return m?.[1];
+  const abre = new RegExp(`<(?:\\w{1,40}:)?${tag}(?:\\s[^<>]{0,2000})?>`, 'g');
+  const m = abre.exec(xml);
+  if (!m) return undefined;
+  const fecha = new RegExp(`</(?:\\w{1,40}:)?${tag}>`, 'g');
+  fecha.lastIndex = abre.lastIndex;
+  const f = fecha.exec(xml);
+  return f ? xml.slice(abre.lastIndex, f.index) : undefined;
 }
 export const valorTag = (xml: string | undefined, tag: string) => {
   const b = xml === undefined ? undefined : bloco(xml, tag);
@@ -31,8 +69,9 @@ export const numero = (s?: string) => { const n = Number(s); return s !== undefi
 export const dataIso = (s?: string) => s?.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
 
 export function lerNfeXml(xml: string): NfeLida {
-  const limpo = xml.replace(/<!--[\s\S]*?-->/g, '').replace(/^﻿/, '');
-  const inf = limpo.match(/<(?:\w+:)?infNFe\b[^>]*\bId="NFe(\d{44})"[^>]*>([\s\S]*?)<\/(?:\w+:)?infNFe>/);
+  const limpo = semComentarios(xml);
+  const achado = blocos(limpo, 'infNFe', true).find((b) => /\bId="NFe\d{44}"/.test(b.atributos));
+  const inf = achado ? [ '', achado.atributos.match(/\bId="NFe(\d{44})"/)![1], achado.conteudo ] : null;
   if (!inf) throw new Error('XML não reconhecido: só leio NF-e (modelo 55). Para nota de serviço, digite os dados ou use o PDF.');
   const [, chave, corpo] = inf;
   const ide = bloco(corpo, 'ide');
@@ -44,8 +83,8 @@ export function lerNfeXml(xml: string): NfeLida {
   const documento = (b?: string) => valorTag(b, 'CNPJ') ?? valorTag(b, 'CPF') ?? '';
   if (valor === undefined || !numeroNota || !emit) throw new Error('XML da NF-e incompleto: faltam número, valor ou emitente');
   const cobr = bloco(corpo, 'cobr') ?? '';
-  const duplicatas = [...cobr.matchAll(/<(?:\w+:)?dup>([\s\S]*?)<\/(?:\w+:)?dup>/g)].map((m) => ({
-    numero: valorTag(m[1], 'nDup'), vencimento: dataIso(valorTag(m[1], 'dVenc')), valor: numero(valorTag(m[1], 'vDup')) ?? 0,
+  const duplicatas = blocos(cobr, 'dup').map(({ conteudo: d }) => ({
+    numero: valorTag(d, 'nDup'), vencimento: dataIso(valorTag(d, 'dVenc')), valor: numero(valorTag(d, 'vDup')) ?? 0,
   }));
   return {
     chave, numero: numeroNota, serie: valorTag(ide, 'serie'),
